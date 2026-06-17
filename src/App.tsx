@@ -80,6 +80,43 @@ const resizeImage = (dataUrl: string, maxPx: number): Promise<string> => {
   });
 };
 
+const sanitizeLogsForStorage = (logs: ApiLog[]): ApiLog[] => {
+  return logs.slice(0, 20).map(log => {
+    try {
+      if (!log.request?.messages) return log;
+      const sanitizedMessages = log.request.messages.map((m: any) => {
+        if (Array.isArray(m.content)) {
+          return {
+            ...m,
+            content: m.content.map((block: any) => {
+              if (block.type === 'image_url' && block.image_url?.url?.startsWith('data:')) {
+                return {
+                  ...block,
+                  image_url: {
+                    ...block.image_url,
+                    url: `[Base64 Image Data - ${block.image_url.url.length} chars]`
+                  }
+                };
+              }
+              return block;
+            })
+          };
+        }
+        return m;
+      });
+      return {
+        ...log,
+        request: {
+          ...log.request,
+          messages: sanitizedMessages
+        }
+      };
+    } catch {
+      return log;
+    }
+  });
+};
+
 export default function App() {
   // State
   const [chats, setChats] = useState<Chat[]>(() => JSON.parse(localStorage.getItem('chats') || '[]'));
@@ -108,11 +145,42 @@ export default function App() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sync to LocalStorage
-  useEffect(() => { localStorage.setItem('chats', JSON.stringify(chats)); }, [chats]);
-  useEffect(() => { localStorage.setItem('apiConfig', JSON.stringify(api)); }, [api]);
-  useEffect(() => { localStorage.setItem('params', JSON.stringify(params)); }, [params]);
-  useEffect(() => { if (activeId) localStorage.setItem('activeChatId', activeId); }, [activeId]);
-  useEffect(() => { localStorage.setItem('apiLogs', JSON.stringify(apiLogs.slice(0, 20))); }, [apiLogs]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('chats', JSON.stringify(chats));
+    } catch (e) {
+      console.warn('Failed to save chats to localStorage:', e);
+    }
+  }, [chats]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('apiConfig', JSON.stringify(api));
+    } catch (e) {
+      console.warn('Failed to save apiConfig to localStorage:', e);
+    }
+  }, [api]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('params', JSON.stringify(params));
+    } catch (e) {
+      console.warn('Failed to save params to localStorage:', e);
+    }
+  }, [params]);
+  useEffect(() => {
+    try {
+      if (activeId) localStorage.setItem('activeChatId', activeId);
+    } catch (e) {
+      console.warn('Failed to save activeChatId to localStorage:', e);
+    }
+  }, [activeId]);
+  useEffect(() => {
+    try {
+      const sanitized = sanitizeLogsForStorage(apiLogs);
+      localStorage.setItem('apiLogs', JSON.stringify(sanitized));
+    } catch (e) {
+      console.warn('Failed to save apiLogs to localStorage:', e);
+    }
+  }, [apiLogs]);
 
   // Abort completion request when active chat changes or component unmounts
   useEffect(() => {
