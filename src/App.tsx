@@ -8,7 +8,7 @@ import {
 import {
   Search, Add, MoreVert, Send, Settings, Psychology, Visibility, ContentCopy,
   Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, Computer, CloudQueue,
-  ArrowForward, History
+  ArrowForward, History, AttachFile, Image
 } from '@mui/icons-material';
 import OpenAI from 'openai';
 
@@ -16,6 +16,11 @@ import OpenAI from 'openai';
 interface Message {
   id: string; role: 'user' | 'assistant'; content: string;
   model?: string; tokens?: number; speed?: number; duration?: number; stopReason?: string;
+  images?: string[]; // base64 Data URLs
+  files?: { name: string; content: string }[]; // attached text files
+}
+interface Attachment {
+  id: string; name: string; type: string; content: string; isImage: boolean;
 }
 interface Chat {
   id: string; title: string; messages: Message[];
@@ -59,6 +64,10 @@ export default function App() {
   const [anchorEl, setAnchorEl] = useState<{ el: HTMLButtonElement; id: string } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachAnchorEl, setAttachAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sync to LocalStorage
@@ -88,6 +97,44 @@ export default function App() {
     setActiveId(newChat.id);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const newAttachment: Attachment = {
+        id: Date.now().toString() + Math.random().toString(),
+        name: file.name,
+        type: file.type,
+        content: text,
+        isImage: false
+      };
+      setAttachments(prev => [...prev, newAttachment]);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      const newAttachment: Attachment = {
+        id: Date.now().toString() + Math.random().toString(),
+        name: file.name,
+        type: file.type,
+        content: dataUrl,
+        isImage: true
+      };
+      setAttachments(prev => [...prev, newAttachment]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const handleSend = async (continueId?: string, regenerateId?: string) => {
     if (!activeChat || loading) return;
     let updatedMsgs: Message[];
@@ -109,13 +156,22 @@ export default function App() {
         ...c, messages: c.messages.map(m => m.id === assistantMsgId ? { ...m, content: '', tokens: undefined, duration: undefined, speed: undefined } : m)
       } : c));
     } else {
-      if (!inputValue.trim()) return;
-      const userMsg: Message = { id: Date.now().toString(), role: 'user', content: inputValue };
+      if (!inputValue.trim() && attachments.length === 0) return;
+      const msgImages = attachments.filter(a => a.isImage).map(a => a.content);
+      const msgFiles = attachments.filter(a => !a.isImage).map(a => ({ name: a.name, content: a.content }));
+      const userMsg: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: inputValue,
+        ...(msgImages.length > 0 ? { images: msgImages } : {}),
+        ...(msgFiles.length > 0 ? { files: msgFiles } : {})
+      };
       updatedMsgs = [...activeChat.messages, userMsg];
       assistantMsgId = (Date.now() + 1).toString();
       const assistantMsg: Message = { id: assistantMsgId, role: 'assistant', content: '', model: api.modelName };
       setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: [...updatedMsgs, assistantMsg] } : c));
       setInputValue('');
+      setAttachments([]);
     }
     setLoading(true);
 
@@ -126,7 +182,30 @@ export default function App() {
 
     const logId = Date.now().toString() + Math.random().toString();
     const systemMsg = params.systemPrompt ? [{ role: 'system', content: params.systemPrompt + (params.enableThinking ? '\nThink step by step before answering.' : '') }] : [];
-    const requestMessages = [...systemMsg, ...updatedMsgs.map(m => ({ role: m.role, content: m.content }))];
+    const requestMessages = [
+      ...systemMsg,
+      ...updatedMsgs.map(m => {
+        if (m.role === 'user') {
+          let textContent = m.content;
+          if (m.files && m.files.length > 0) {
+            const filesStr = m.files.map(f => `[Attached File: ${f.name}]\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n');
+            textContent = textContent ? `${filesStr}\n\n${textContent}` : filesStr;
+          }
+          if (m.images && m.images.length > 0 && api.vision) {
+            const contentBlocks: any[] = [{ type: 'text', text: textContent }];
+            m.images.forEach(img => {
+              contentBlocks.push({
+                type: 'image_url',
+                image_url: { url: img }
+              });
+            });
+            return { role: m.role, content: contentBlocks };
+          }
+          return { role: m.role, content: textContent };
+        }
+        return { role: m.role, content: m.content };
+      })
+    ];
     const requestPayload = {
       model: api.modelName,
       messages: requestMessages,
@@ -323,7 +402,51 @@ export default function App() {
                           </Stack>
                         ) : (
                           <Stack spacing={0.5} alignItems="flex-end">
-                            <Box bgcolor="#e3e3e7" px={2} py={1} borderRadius={4}><Typography fontSize={14}>{m.content}</Typography></Box>
+                            <Box bgcolor="#e3e3e7" px={2} py={1} borderRadius={4}>
+                              {m.files && m.files.length > 0 && (
+                                <Stack spacing={0.5} mb={m.content ? 1 : 0} data-testid="chat-message-files">
+                                  {m.files.map((file, idx) => (
+                                    <Stack
+                                      key={idx}
+                                      direction="row"
+                                      alignItems="center"
+                                      spacing={0.5}
+                                      sx={{
+                                        bgcolor: 'rgba(255, 255, 255, 0.7)',
+                                        borderRadius: 1,
+                                        p: 0.75,
+                                        border: '1px solid rgba(0, 0, 0, 0.05)'
+                                      }}
+                                      data-testid="message-file-badge"
+                                    >
+                                      <AttachFile fontSize="small" sx={{ fontSize: 14 }} />
+                                      <Typography fontSize={11} noWrap fontWeight="medium">{file.name}</Typography>
+                                    </Stack>
+                                  ))}
+                                </Stack>
+                              )}
+                              {m.images && m.images.length > 0 && (
+                                <Stack direction="row" spacing={1} flexWrap="wrap" mb={m.content ? 1 : 0} data-testid="chat-message-images">
+                                  {m.images.map((img, idx) => (
+                                    <Box
+                                      key={idx}
+                                      component="img"
+                                      src={img}
+                                      alt={`attachment-${idx}`}
+                                      sx={{
+                                        maxWidth: 160,
+                                        maxHeight: 160,
+                                        borderRadius: 1.5,
+                                        objectFit: 'cover',
+                                        border: '1px solid rgba(0, 0, 0, 0.1)'
+                                      }}
+                                      data-testid="message-image-thumbnail"
+                                    />
+                                  ))}
+                                </Stack>
+                              )}
+                              {m.content && <Typography fontSize={14}>{m.content}</Typography>}
+                            </Box>
                             <Stack direction="row" spacing={0.5}>
                               <Tooltip title="Fork conversation"><IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton></Tooltip>
                               <Tooltip title="Copy message"><IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton></Tooltip>
@@ -401,18 +524,96 @@ export default function App() {
               {/* Bottom Input Area */}
               <Box p={3} borderTop="1px solid #e5e5e7">
                 <Box border="1px solid #e5e5e7" borderRadius={4} p={1} bgcolor="#fafafa">
+                  {attachments.length > 0 && (
+                    <Stack direction="row" spacing={1} overflow="auto" pb={1} mb={1} borderBottom="1px solid #e5e5e7" data-testid="staged-attachments-preview">
+                      {attachments.map(att => (
+                        <Box key={att.id} position="relative" display="inline-block" sx={{ flexShrink: 0 }} data-testid="staged-attachment">
+                          {att.isImage ? (
+                            <Box
+                              component="img"
+                              src={att.content}
+                              alt={att.name}
+                              data-testid="staged-image"
+                              sx={{ width: 48, height: 48, borderRadius: 1.5, objectFit: 'cover', border: '1px solid #e5e5e7' }}
+                            />
+                          ) : (
+                            <Stack direction="row" alignItems="center" spacing={0.5} data-testid="staged-file" sx={{ height: 48, px: 1.5, borderRadius: 1.5, border: '1px solid #e5e5e7', bgcolor: '#ffffff' }}>
+                              <AttachFile fontSize="small" color="action" />
+                              <Typography fontSize={11} noWrap sx={{ maxWidth: 80 }}>{att.name}</Typography>
+                            </Stack>
+                          )}
+                          <IconButton
+                            size="small"
+                            data-testid="remove-attachment"
+                            onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                            sx={{
+                              position: 'absolute', top: -6, right: -6, bgcolor: 'rgba(0,0,0,0.6)', color: '#fff', p: 0.25,
+                              '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' }
+                            }}
+                          >
+                            <Delete sx={{ fontSize: 10 }} />
+                          </IconButton>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
                   <TextField fullWidth multiline maxRows={4} placeholder="Send a message to the model..." value={inputValue} onChange={e => setInputValue(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} variant="standard" InputProps={{ disableUnderline: true }} />
                   <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
                     <Stack direction="row" spacing={1}>
-                      <Tooltip title="Attach"><IconButton size="small" color="primary"><Add /></IconButton></Tooltip>
+                      <Tooltip title="Attach"><IconButton size="small" color="primary" onClick={e => setAttachAnchorEl(e.currentTarget)} data-testid="attach-button"><Add /></IconButton></Tooltip>
                       <Tooltip title="Tools"><IconButton size="small"><Build fontSize="small" /></IconButton></Tooltip>
                       <Button size="small" startIcon={<Psychology />} variant={params.enableThinking ? 'contained' : 'outlined'} onClick={() => setParams({ ...params, enableThinking: !params.enableThinking })} sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Think</Button>
                       {api.vision && <Button size="small" startIcon={<Visibility />} variant="outlined" sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Vision</Button>}
                     </Stack>
-                    <Tooltip title="Send message"><IconButton onClick={() => handleSend()} disabled={!inputValue.trim() || loading} color="primary" sx={{ bgcolor: inputValue.trim() ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }}><Send fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Send message"><IconButton onClick={() => handleSend()} disabled={(!inputValue.trim() && attachments.length === 0) || loading} color="primary" sx={{ bgcolor: (inputValue.trim() || attachments.length > 0) ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }} data-testid="send-button"><Send fontSize="small" /></IconButton></Tooltip>
                   </Stack>
                 </Box>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleFileChange}
+                  data-testid="file-input"
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={imageInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleImageChange}
+                  data-testid="image-input"
+                />
+                <Popover
+                  open={Boolean(attachAnchorEl)}
+                  anchorEl={attachAnchorEl}
+                  onClose={() => setAttachAnchorEl(null)}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                >
+                  <List dense sx={{ p: 0.5 }}>
+                    <ListItemButton
+                      onClick={() => {
+                        setAttachAnchorEl(null);
+                        fileInputRef.current?.click();
+                      }}
+                      data-testid="attach-file-option"
+                    >
+                      <AttachFile fontSize="small" sx={{ mr: 1 }} />
+                      <ListItemText primary="Attach file" />
+                    </ListItemButton>
+                    <ListItemButton
+                      onClick={() => {
+                        setAttachAnchorEl(null);
+                        imageInputRef.current?.click();
+                      }}
+                      data-testid="attach-image-option"
+                    >
+                      <Image fontSize="small" sx={{ mr: 1 }} />
+                      <ListItemText primary="Attach image" />
+                    </ListItemButton>
+                  </List>
+                </Popover>
               </Box>
             </>
           ) : (
