@@ -1,4 +1,4 @@
-import { Box, Stack, Typography, TextField, IconButton, Button, CircularProgress, Tooltip, Popover, List, ListItemButton, ListItemText } from '@mui/material';
+import { Box, Stack, Typography, TextField, IconButton, Button, CircularProgress, Tooltip, Popover, List, ListItemButton, ListItemText, InputBase } from '@mui/material';
 import { Edit, Delete, AltRoute, ContentCopy, Computer, CloudQueue, Replay, ArrowForward, AttachFile, Add, Psychology, Send, Image } from '@mui/icons-material';
 import { Chat, Attachment, Params } from '../types';
 
@@ -82,25 +82,94 @@ export function ChatPanel({
           <Box flex={1} overflow="auto" p={3}>
             <Stack spacing={3}>
               {activeChat.messages.map(m => (
-                <Box key={m.id} alignSelf={m.role === 'user' ? 'flex-end' : 'flex-start'} maxWidth="80%">
+                <Box key={m.id} alignSelf={m.role === 'user' ? 'flex-end' : 'flex-start'} maxWidth="80%" width="100%">
                   {m.role === 'user' ? (
-                    editId === m.id ? (
-                      <Stack spacing={1} width="100%" minWidth={320} alignItems="flex-start">
-                        <TextField
-                          fullWidth
-                          multiline
-                          autoFocus
-                          value={editText}
-                          onChange={e => setEditText(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Escape') setEditId(null);
-                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                              handleEditMessage(m.id, editText);
-                              setEditId(null);
-                            }
-                          }}
-                          size="small"
-                        />
+                    <Stack spacing={1} width="100%" minWidth={320} alignItems="flex-end">
+                      <Box
+                        sx={{
+                          bgcolor: editId === m.id ? '#ffffff' : '#e3e3e7',
+                          border: editId === m.id ? '1px solid #007aff' : 'none',
+                          borderRadius: 4,
+                          px: 2,
+                          py: 1,
+                          margin: editId === m.id ? '-1px' : 0,
+                          boxSizing: 'border-box',
+                          width: '100%'
+                        }}
+                      >
+                        {m.files && m.files.length > 0 && editId !== m.id && (
+                          <Stack spacing={0.5} mb={m.content ? 1 : 0} data-testid="chat-message-files">
+                            {m.files.map((file, idx) => (
+                              <Stack
+                                key={idx}
+                                direction="row"
+                                alignItems="center"
+                                spacing={0.5}
+                                sx={{
+                                  bgcolor: 'rgba(255, 255, 255, 0.7)',
+                                  borderRadius: 1,
+                                  p: 0.75,
+                                  border: '1px solid rgba(0, 0, 0, 0.05)'
+                                }}
+                                data-testid="message-file-badge"
+                              >
+                                <AttachFile fontSize="small" sx={{ fontSize: 14 }} />
+                                <Typography fontSize={11} noWrap fontWeight="medium">{file.name}</Typography>
+                              </Stack>
+                            ))}
+                          </Stack>
+                        )}
+                        {m.images && m.images.length > 0 && editId !== m.id && (
+                          <Stack direction="row" spacing={1} flexWrap="wrap" mb={m.content ? 1 : 0} data-testid="chat-message-images">
+                            {m.images.map((img, idx) => (
+                              <Box
+                                key={idx}
+                                component="img"
+                                src={img}
+                                alt={`attachment-${idx}`}
+                                sx={{
+                                  maxWidth: 160,
+                                  maxHeight: 160,
+                                  borderRadius: 1.5,
+                                  objectFit: 'cover',
+                                  border: '1px solid rgba(0, 0, 0, 0.1)'
+                                }}
+                                data-testid="message-image-thumbnail"
+                              />
+                            ))}
+                          </Stack>
+                        )}
+                        {m.content && (
+                          <InputBase
+                            multiline
+                            fullWidth
+                            readOnly={editId !== m.id}
+                            autoFocus={editId === m.id}
+                            value={editId === m.id ? editText : m.content}
+                            onChange={e => setEditText(e.target.value)}
+                            onKeyDown={e => {
+                              if (editId !== m.id) return;
+                              if (e.key === 'Escape') setEditId(null);
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                handleEditMessage(m.id, editText);
+                                setEditId(null);
+                              }
+                            }}
+                            sx={{
+                              fontSize: 14,
+                              fontFamily: 'inherit',
+                              lineHeight: 1.5,
+                              p: 0,
+                              color: 'inherit',
+                              '& .MuiInputBase-input.Mui-readOnly': {
+                                cursor: 'default',
+                                WebkitTextFillColor: 'currentColor'
+                              }
+                            }}
+                          />
+                        )}
+                      </Box>
+                      {editId === m.id ? (
                         <Stack direction="row" spacing={1}>
                           <Button
                             size="small"
@@ -119,54 +188,7 @@ export function ChatPanel({
                             Save (⌘Enter)
                           </Button>
                         </Stack>
-                      </Stack>
-                    ) : (
-                      <Stack spacing={0.5} alignItems="flex-end">
-                        <Box bgcolor="#e3e3e7" px={2} py={1} borderRadius={4}>
-                          {m.files && m.files.length > 0 && (
-                            <Stack spacing={0.5} mb={m.content ? 1 : 0} data-testid="chat-message-files">
-                              {m.files.map((file, idx) => (
-                                <Stack
-                                  key={idx}
-                                  direction="row"
-                                  alignItems="center"
-                                  spacing={0.5}
-                                  sx={{
-                                    bgcolor: 'rgba(255, 255, 255, 0.7)',
-                                    borderRadius: 1,
-                                    p: 0.75,
-                                    border: '1px solid rgba(0, 0, 0, 0.05)'
-                                  }}
-                                  data-testid="message-file-badge"
-                                >
-                                  <AttachFile fontSize="small" sx={{ fontSize: 14 }} />
-                                  <Typography fontSize={11} noWrap fontWeight="medium">{file.name}</Typography>
-                                </Stack>
-                              ))}
-                            </Stack>
-                          )}
-                          {m.images && m.images.length > 0 && (
-                            <Stack direction="row" spacing={1} flexWrap="wrap" mb={m.content ? 1 : 0} data-testid="chat-message-images">
-                              {m.images.map((img, idx) => (
-                                <Box
-                                  key={idx}
-                                  component="img"
-                                  src={img}
-                                  alt={`attachment-${idx}`}
-                                  sx={{
-                                    maxWidth: 160,
-                                    maxHeight: 160,
-                                    borderRadius: 1.5,
-                                    objectFit: 'cover',
-                                    border: '1px solid rgba(0, 0, 0, 0.1)'
-                                  }}
-                                  data-testid="message-image-thumbnail"
-                                />
-                              ))}
-                            </Stack>
-                          )}
-                          {m.content && <Typography fontSize={14}>{m.content}</Typography>}
-                        </Box>
+                      ) : (
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="Fork conversation">
                             <IconButton size="small" onClick={() => handleForkChat(m.id)}>
@@ -189,27 +211,68 @@ export function ChatPanel({
                             </IconButton>
                           </Tooltip>
                         </Stack>
-                      </Stack>
-                    )
+                      )}
+                    </Stack>
                   ) : (
-                    editId === m.id ? (
-                      <Stack spacing={1} width="100%" minWidth={400} alignItems="flex-start">
-                        <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
-                        <TextField
-                          fullWidth
+                    <Stack spacing={1} width="100%" minWidth={400} alignItems="flex-start">
+                      <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
+                      <Box
+                        sx={{
+                          width: '100%',
+                          bgcolor: editId === m.id ? '#ffffff' : 'transparent',
+                          border: editId === m.id ? '1px solid #007aff' : 'none',
+                          borderRadius: 1.5,
+                          p: 0,
+                          margin: editId === m.id ? '-1px' : 0,
+                          boxSizing: 'border-box'
+                        }}
+                      >
+                        <InputBase
                           multiline
-                          autoFocus
-                          value={editText}
+                          fullWidth
+                          readOnly={editId !== m.id}
+                          autoFocus={editId === m.id}
+                          value={editId === m.id ? editText : m.content}
                           onChange={e => setEditText(e.target.value)}
                           onKeyDown={e => {
+                            if (editId !== m.id) return;
                             if (e.key === 'Escape') setEditId(null);
                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                               handleEditMessage(m.id, editText);
                               setEditId(null);
                             }
                           }}
-                          size="small"
+                          sx={{
+                            fontSize: 14,
+                            fontFamily: 'inherit',
+                            lineHeight: 1.5,
+                            p: 0,
+                            color: 'inherit',
+                            '& .MuiInputBase-input.Mui-readOnly': {
+                              cursor: 'default',
+                              WebkitTextFillColor: 'currentColor'
+                            }
+                          }}
                         />
+                      </Box>
+                      {m.tokens && editId !== m.id && (
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Tooltip title="Speed">
+                            <Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary">
+                              <Computer fontSize="inherit" />
+                              <Typography fontSize={11}>{m.speed} tok/s</Typography>
+                            </Stack>
+                          </Tooltip>
+                          <Tooltip title="Tokens">
+                            <Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary">
+                              <CloudQueue fontSize="inherit" />
+                              <Typography fontSize={11}>{m.tokens} tokens</Typography>
+                            </Stack>
+                          </Tooltip>
+                          <Typography fontSize={11} color="text.secondary">{m.duration?.toFixed(2)}s</Typography>
+                        </Stack>
+                      )}
+                      {editId === m.id ? (
                         <Stack direction="row" spacing={1}>
                           <Button
                             size="small"
@@ -228,28 +291,7 @@ export function ChatPanel({
                             Save (⌘Enter)
                           </Button>
                         </Stack>
-                      </Stack>
-                    ) : (
-                      <Stack spacing={1}>
-                        <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
-                        <Typography fontSize={14} sx={{ whiteSpace: 'pre-wrap' }}>{m.content}</Typography>
-                        {m.tokens && (
-                          <Stack direction="row" spacing={1.5} alignItems="center">
-                            <Tooltip title="Speed">
-                              <Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary">
-                                <Computer fontSize="inherit" />
-                                <Typography fontSize={11}>{m.speed} tok/s</Typography>
-                              </Stack>
-                            </Tooltip>
-                            <Tooltip title="Tokens">
-                              <Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary">
-                                <CloudQueue fontSize="inherit" />
-                                <Typography fontSize={11}>{m.tokens} tokens</Typography>
-                              </Stack>
-                            </Tooltip>
-                            <Typography fontSize={11} color="text.secondary">{m.duration?.toFixed(2)}s</Typography>
-                          </Stack>
-                        )}
+                      ) : (
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="Regenerate message">
                             <IconButton size="small" onClick={() => handleSend(undefined, m.id)}>
@@ -282,8 +324,8 @@ export function ChatPanel({
                             </IconButton>
                           </Tooltip>
                         </Stack>
-                      </Stack>
-                    )
+                      )}
+                    </Stack>
                   )}
                 </Box>
               ))}

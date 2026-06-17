@@ -349,7 +349,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
   test('13. should support stopping an ongoing LLM generation call', async ({ page }) => {
     // Set up endpoint mock to stall response forever
-    await page.route('**/v1/chat/completions', async (route) => {
+    await page.route('**/v1/chat/completions', async () => {
       await new Promise(() => {});
     });
 
@@ -374,6 +374,53 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(page.locator('text=Aborted').first()).toBeVisible();
 
     await page.screenshot({ path: './dist/chat-13-stop-generation.png', fullPage: true });
+  });
+
+  test('14. should maintain identical text wrapping during message edit', async ({ page }) => {
+    await page.route('**/v1/chat/completions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {"choices":[{"delta":{"content":"Reply"}}]}\n\ndata: [DONE]\n\n'
+      });
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    const longWord = '1234567890'.repeat(15); // 150 chars long word
+    await input.fill(longWord);
+    await input.press('Enter');
+
+    // Wait for response
+    await expect(page.locator('text=Reply')).toBeVisible();
+
+    // Take screenshot of normal user message bubble
+    const userBubble = page.locator('text=' + longWord);
+    await expect(userBubble).toBeVisible();
+    const normalBox = await userBubble.boundingBox();
+    expect(normalBox).not.toBeNull();
+    await page.screenshot({ path: './dist/chat-14-wrap-normal.png', fullPage: true });
+
+    // Trigger edit mode
+    const editBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="EditIcon"]') }).nth(1);
+    await editBtn.click();
+
+    // Verify textarea is open
+    const textarea = page.locator('textarea').first();
+    await expect(textarea).toBeVisible();
+    const editBox = await textarea.boundingBox();
+    expect(editBox).not.toBeNull();
+
+    // Take screenshot of edit mode user message bubble
+    await page.screenshot({ path: './dist/chat-14-wrap-editing.png', fullPage: true });
+
+    // Verify dimensions are almost identical (allowing a small padding/border tolerance of 15px)
+    console.log('--- BOUNDING BOXES ---', 'normal:', normalBox, 'edit:', editBox);
+    expect(Math.abs(normalBox!.width - editBox!.width)).toBeLessThan(15);
+    expect(Math.abs(normalBox!.height - editBox!.height)).toBeLessThan(15);
+
+    // Click discard
+    await page.locator('button:has-text("Discard (Esc)")').click();
   });
   
 });
