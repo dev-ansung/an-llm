@@ -74,14 +74,15 @@ test('verify standalone chat app functionality and layout with mocked stream', a
   // 6. Test Editing a Message (on the forked chat)
   // Edit the user message (the second EditIcon button; index 0 is in the header of the new chat)
   const userEditBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="EditIcon"]') }).nth(1);
-  
-  // Set up prompt dialog handler for window.prompt
-  page.once('dialog', async dialog => {
-    expect(dialog.type()).toBe('prompt');
-    await dialog.accept('Hello model, this is an edited message');
-  });
-  
   await userEditBtn.click();
+
+  // Find the open textarea in edit mode and type new content
+  const editField = page.locator('textarea').first();
+  await editField.fill('Hello model, this is an edited message');
+
+  // Click Save (⌘Enter) button
+  const saveBtn = page.locator('button:has-text("Save (⌘Enter)")');
+  await saveBtn.click();
   
   // Verify edited message text is updated in UI
   await expect(page.locator('text=Hello model, this is an edited message')).toBeVisible();

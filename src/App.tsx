@@ -44,6 +44,8 @@ export default function App() {
   const [showApiDialog, setShowApiDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState<{ el: HTMLButtonElement; id: string; isFolder: boolean } | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sync to LocalStorage
@@ -243,32 +245,109 @@ export default function App() {
                   {activeChat.messages.map(m => (
                     <Box key={m.id} alignSelf={m.role === 'user' ? 'flex-end' : 'flex-start'} maxWidth="80%">
                       {m.role === 'user' ? (
-                        <Stack spacing={0.5} alignItems="flex-end">
-                          <Box bgcolor="#e3e3e7" px={2} py={1} borderRadius={4}><Typography fontSize={14}>{m.content}</Typography></Box>
-                          <Stack direction="row" spacing={0.5}>
-                            <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
-                            <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
-                            <IconButton size="small" onClick={() => { const val = prompt('Edit:', m.content); if (val) handleEditMessage(m.id, val); }}><Edit fontSize="inherit" /></IconButton>
-                          </Stack>
-                        </Stack>
-                      ) : (
-                        <Stack spacing={1}>
-                          <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
-                          <Typography fontSize={14} sx={{ whiteSpace: 'pre-wrap' }}>{m.content}</Typography>
-                          {m.tokens && (
-                            <Stack direction="row" spacing={1.5} alignItems="center">
-                              <Tooltip title="Speed"><Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary"><Computer fontSize="inherit" /><Typography fontSize={11}>{m.speed} tok/s</Typography></Stack></Tooltip>
-                              <Tooltip title="Tokens"><Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary"><CloudQueue fontSize="inherit" /><Typography fontSize={11}>{m.tokens} tokens</Typography></Stack></Tooltip>
-                              <Typography fontSize={11} color="text.secondary">{m.duration?.toFixed(2)}s</Typography>
+                        editId === m.id ? (
+                          <Stack spacing={1} width="100%" minWidth={320} alignItems="flex-start">
+                            <TextField
+                              fullWidth
+                              multiline
+                              autoFocus
+                              value={editText}
+                              onChange={e => setEditText(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Escape') setEditId(null);
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                  handleEditMessage(m.id, editText);
+                                  setEditId(null);
+                                }
+                              }}
+                              size="small"
+                            />
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => setEditId(null)}
+                                sx={{ textTransform: 'none', bgcolor: '#e3e3e7', color: '#1d1d1f', borderRadius: 1.5, boxShadow: 'none', '&:hover': { bgcolor: '#d1d1d6' } }}
+                              >
+                                Discard (Esc)
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => { handleEditMessage(m.id, editText); setEditId(null); }}
+                                sx={{ textTransform: 'none', bgcolor: '#007aff', color: '#fff', borderRadius: 1.5, boxShadow: 'none', '&:hover': { bgcolor: '#0062cc' } }}
+                              >
+                                Save (⌘Enter)
+                              </Button>
                             </Stack>
-                          )}
-                          <Stack direction="row" spacing={0.5}>
-                            <IconButton size="small" onClick={handleSend}><Replay fontSize="inherit" /></IconButton>
-                            <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
-                            <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
-                            <IconButton size="small" onClick={() => { const val = prompt('Edit:', m.content); if (val) handleEditMessage(m.id, val); }}><Edit fontSize="inherit" /></IconButton>
                           </Stack>
-                        </Stack>
+                        ) : (
+                          <Stack spacing={0.5} alignItems="flex-end">
+                            <Box bgcolor="#e3e3e7" px={2} py={1} borderRadius={4}><Typography fontSize={14}>{m.content}</Typography></Box>
+                            <Stack direction="row" spacing={0.5}>
+                              <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton>
+                            </Stack>
+                          </Stack>
+                        )
+                      ) : (
+                        editId === m.id ? (
+                          <Stack spacing={1} width="100%" minWidth={400} alignItems="flex-start">
+                            <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
+                            <TextField
+                              fullWidth
+                              multiline
+                              autoFocus
+                              value={editText}
+                              onChange={e => setEditText(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Escape') setEditId(null);
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                  handleEditMessage(m.id, editText);
+                                  setEditId(null);
+                                }
+                              }}
+                              size="small"
+                            />
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => setEditId(null)}
+                                sx={{ textTransform: 'none', bgcolor: '#e3e3e7', color: '#1d1d1f', borderRadius: 1.5, boxShadow: 'none', '&:hover': { bgcolor: '#d1d1d6' } }}
+                              >
+                                Discard (Esc)
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => { handleEditMessage(m.id, editText); setEditId(null); }}
+                                sx={{ textTransform: 'none', bgcolor: '#007aff', color: '#fff', borderRadius: 1.5, boxShadow: 'none', '&:hover': { bgcolor: '#0062cc' } }}
+                              >
+                                Save (⌘Enter)
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Stack spacing={1}>
+                            <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
+                            <Typography fontSize={14} sx={{ whiteSpace: 'pre-wrap' }}>{m.content}</Typography>
+                            {m.tokens && (
+                              <Stack direction="row" spacing={1.5} alignItems="center">
+                                <Tooltip title="Speed"><Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary"><Computer fontSize="inherit" /><Typography fontSize={11}>{m.speed} tok/s</Typography></Stack></Tooltip>
+                                <Tooltip title="Tokens"><Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary"><CloudQueue fontSize="inherit" /><Typography fontSize={11}>{m.tokens} tokens</Typography></Stack></Tooltip>
+                                <Typography fontSize={11} color="text.secondary">{m.duration?.toFixed(2)}s</Typography>
+                              </Stack>
+                            )}
+                            <Stack direction="row" spacing={0.5}>
+                              <IconButton size="small" onClick={handleSend}><Replay fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton>
+                            </Stack>
+                          </Stack>
+                        )
                       )}
                     </Box>
                   ))}
