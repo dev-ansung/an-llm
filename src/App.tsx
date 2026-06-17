@@ -27,9 +27,11 @@ interface Chat {
 }
 interface Params {
   systemPrompt: string; temperature: number; limitLength: boolean; enableThinking: boolean;
+  downsizeEnabled: boolean; downsizeMaxPx: number;
 }
 const defaultParams: Params = {
-  systemPrompt: 'You are Gemma, a large language model.', temperature: 1.0, limitLength: false, enableThinking: false
+  systemPrompt: 'You are Gemma, a large language model.', temperature: 1.0, limitLength: false, enableThinking: false,
+  downsizeEnabled: true, downsizeMaxPx: 2048
 };
 interface ApiConfig { apiKey: string; apiBase: string; modelName: string; }
 interface ApiLog {
@@ -47,12 +49,47 @@ const theme = createTheme({
   typography: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }
 });
 
+const resizeImage = (dataUrl: string, maxPx: number): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxPx || height > maxPx) {
+        if (width > height) {
+          height = Math.round((height * maxPx) / width);
+          width = maxPx;
+        } else {
+          width = Math.round((width * maxPx) / height);
+          height = maxPx;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/png'));
+          return;
+        }
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};
+
 export default function App() {
   // State
   const [chats, setChats] = useState<Chat[]>(() => JSON.parse(localStorage.getItem('chats') || '[]'));
   const [activeId, setActiveId] = useState<string>(() => localStorage.getItem('activeChatId') || '');
   const [api, setApi] = useState<ApiConfig>(() => JSON.parse(localStorage.getItem('apiConfig') || JSON.stringify(defaultApiConfig)));
-  const [params, setParams] = useState<Params>(() => JSON.parse(localStorage.getItem('params') || JSON.stringify(defaultParams)));
+  const [params, setParams] = useState<Params>(() => {
+    const saved = localStorage.getItem('params');
+    if (!saved) return defaultParams;
+    try { return { ...defaultParams, ...JSON.parse(saved) }; } catch { return defaultParams; }
+  });
   const [rightTab, setRightTab] = useState(0);
   const [apiLogs, setApiLogs] = useState<ApiLog[]>(() => {
     try { return JSON.parse(localStorage.getItem('apiLogs') || '[]'); } catch { return []; }
@@ -120,8 +157,11 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    reader.onload = async (event) => {
+      let dataUrl = event.target?.result as string;
+      if (params.downsizeEnabled) {
+        dataUrl = await resizeImage(dataUrl, params.downsizeMaxPx);
+      }
       const newAttachment: Attachment = {
         id: Date.now().toString() + Math.random().toString(),
         name: file.name,
@@ -144,8 +184,11 @@ export default function App() {
         const file = item.getAsFile();
         if (!file) continue;
         const reader = new FileReader();
-        reader.onload = (event) => {
-          const dataUrl = event.target?.result as string;
+        reader.onload = async (event) => {
+          let dataUrl = event.target?.result as string;
+          if (params.downsizeEnabled) {
+            dataUrl = await resizeImage(dataUrl, params.downsizeMaxPx);
+          }
           const newAttachment: Attachment = {
             id: Date.now().toString() + Math.random().toString(),
             name: file.name || `pasted-image-${Date.now()}.png`,
@@ -677,6 +720,46 @@ export default function App() {
                     <AccordionDetails sx={{ p: 0, pb: 2 }}>
                       <FormControlLabel control={<Switch checked={params.enableThinking} onChange={e => setParams({ ...params, enableThinking: e.target.checked })} />}
                         label={<Typography fontSize={13}>Enable Thinking</Typography>} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  <Accordion defaultExpanded disableGutters elevation={0} sx={{ borderBottom: '1px solid #e5e5e7' }}>
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                      <Typography fontSize={13} fontWeight="bold">Image Input</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 0, pb: 2 }}>
+                      <Stack spacing={1.5}>
+                        <Box sx={{ bgcolor: '#fafafa', p: 1.5, borderRadius: 1.5, border: '1px solid #e5e5e7' }}>
+                          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} mb={0.5}>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                              <Typography fontSize={13}>Never exceed</Typography>
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={params.downsizeMaxPx}
+                                onChange={e => setParams({ ...params, downsizeMaxPx: parseInt(e.target.value) || 0 })}
+                                disabled={!params.downsizeEnabled}
+                                inputProps={{ min: 1, style: { padding: '2px 8px', fontSize: 13, width: 60, textAlign: 'center' }, 'data-testid': 'downsize-max-px-input' }}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    borderRadius: 1.5,
+                                    bgcolor: '#ffffff'
+                                  }
+                                }}
+                              />
+                              <Typography fontSize={13}>px</Typography>
+                            </Stack>
+                            <Switch
+                              checked={params.downsizeEnabled}
+                              onChange={e => setParams({ ...params, downsizeEnabled: e.target.checked })}
+                              data-testid="downsize-enabled-toggle"
+                            />
+                          </Stack>
+                          <Typography fontSize={11} color="text.secondary">
+                            Resize images such that the longest edge is no larger than the value above. Proportions are maintained.
+                          </Typography>
+                        </Box>
+                      </Stack>
                     </AccordionDetails>
                   </Accordion>
 

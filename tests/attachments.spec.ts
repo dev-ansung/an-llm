@@ -211,4 +211,136 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
 
     await page.screenshot({ path: './dist/attachments-4-paste.png', fullPage: true });
   });
+
+  test('5. should downsize large images if downsizing is enabled and respect max px limit', async ({ page }) => {
+    // Create new chat to show parameters
+    await page.locator('button:has-text("New Chat")').click();
+
+    // Verify downsizing setting is visible in the right side panel
+    await expect(page.locator('[data-testid="downsize-enabled-toggle"]')).toBeVisible();
+    
+    // Fill the max px setting to 1000 px for testing
+    const maxPxInput = page.locator('[data-testid="downsize-max-px-input"]');
+    await maxPxInput.fill('1000');
+
+    // Focus on input
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.focus();
+
+    // Paste a 3000x1500 red image
+    await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 3000;
+      canvas.height = 1500;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(0, 0, 3000, 1500);
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+
+      const byteString = atob(dataUrl.split(',')[1]);
+      const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+      const file = new File([blob], 'large-pasted.png', { type: mimeString });
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      
+      const textarea = document.querySelector('textarea');
+      if (textarea) {
+        const pasteEvent = new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dataTransfer
+        });
+        textarea.dispatchEvent(pasteEvent);
+      }
+    });
+
+    // Wait for preview to stage
+    await expect(page.locator('[data-testid="staged-image"]')).toBeVisible();
+
+    // Check dimensions of staged image
+    const src = await page.locator('[data-testid="staged-image"]').getAttribute('src');
+    expect(src).not.toBeNull();
+
+    const dimensions = await page.evaluate(async (imgSrc) => {
+      return new Promise<{ width: number, height: number }>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.width, height: img.height });
+        img.src = imgSrc!;
+      });
+    }, src);
+
+    // Verify it was downsized to maxPx=1000, maintaining proportions (height should be 500)
+    expect(dimensions.width).toBe(1000);
+    expect(dimensions.height).toBe(500);
+
+    // Now disable downsizing
+    await page.locator('[data-testid="downsize-enabled-toggle"]').click();
+
+    // Clear staged attachments
+    await page.locator('[data-testid="remove-attachment"]').click();
+    await expect(page.locator('[data-testid="staged-image"]')).not.toBeVisible();
+
+    // Paste the same 3000x1500 image again
+    await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 3000;
+      canvas.height = 1500;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(0, 0, 3000, 1500);
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+
+      const byteString = atob(dataUrl.split(',')[1]);
+      const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+      const file = new File([blob], 'large-pasted-no-resize.png', { type: mimeString });
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      
+      const textarea = document.querySelector('textarea');
+      if (textarea) {
+        const pasteEvent = new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dataTransfer
+        });
+        textarea.dispatchEvent(pasteEvent);
+      }
+    });
+
+    // Wait for preview to stage
+    await expect(page.locator('[data-testid="staged-image"]')).toBeVisible();
+
+    // Check dimensions of staged image (should be original 3000x1500)
+    const srcOriginal = await page.locator('[data-testid="staged-image"]').getAttribute('src');
+    const dimensionsOriginal = await page.evaluate(async (imgSrc) => {
+      return new Promise<{ width: number, height: number }>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.width, height: img.height });
+        img.src = imgSrc!;
+      });
+    }, srcOriginal);
+
+    expect(dimensionsOriginal.width).toBe(3000);
+    expect(dimensionsOriginal.height).toBe(1500);
+
+    await page.screenshot({ path: './dist/attachments-5-downsizing.png', fullPage: true });
+  });
 });
