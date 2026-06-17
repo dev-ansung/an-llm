@@ -134,6 +134,13 @@ export default function App() {
     setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: newMsgs } : c));
   };
 
+  const handleDeleteMessage = (msgId: string) => {
+    if (!activeChat) return;
+    if (confirm('Delete this message?')) {
+      setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: c.messages.filter(m => m.id !== msgId) } : c));
+    }
+  };
+
   const handleForkChat = (msgId: string) => {
     if (!activeChat) return;
     const idx = activeChat.messages.findIndex(m => m.id === msgId);
@@ -288,6 +295,7 @@ export default function App() {
                               <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
                               <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
                               <IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => handleDeleteMessage(m.id)}><Delete fontSize="inherit" /></IconButton>
                             </Stack>
                           </Stack>
                         )
@@ -345,6 +353,7 @@ export default function App() {
                               <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
                               <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
                               <IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton>
+                              <IconButton size="small" onClick={() => handleDeleteMessage(m.id)}><Delete fontSize="inherit" /></IconButton>
                             </Stack>
                           </Stack>
                         )
