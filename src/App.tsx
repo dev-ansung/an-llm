@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Box, Stack, Typography, TextField, IconButton, Button, List, ListItem, ListItemButton,
   ListItemText, Popover, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, Slider,
-  Switch, FormControlLabel, Select, MenuItem, InputAdornment, Dialog, DialogTitle,
+  Switch, FormControlLabel, InputAdornment, Dialog, DialogTitle,
   DialogContent, DialogActions, Tooltip, CircularProgress, ThemeProvider, createTheme, Checkbox
 } from '@mui/material';
 import {
@@ -19,8 +19,13 @@ interface Message {
 }
 interface Chat {
   id: string; title: string; folderId?: string; messages: Message[];
+}
+interface Params {
   systemPrompt: string; temperature: number; limitLength: boolean; enableThinking: boolean;
 }
+const defaultParams: Params = {
+  systemPrompt: 'You are Gemma, a large language model.', temperature: 1.0, limitLength: false, enableThinking: false
+};
 interface FolderType { id: string; name: string; }
 interface ApiConfig { apiKey: string; apiBase: string; modelName: string; vision: boolean; tools: boolean; }
 
@@ -39,6 +44,7 @@ export default function App() {
   const [folders, setFolders] = useState<FolderType[]>(() => JSON.parse(localStorage.getItem('folders') || '[]'));
   const [activeId, setActiveId] = useState<string>(() => localStorage.getItem('activeChatId') || '');
   const [api, setApi] = useState<ApiConfig>(() => JSON.parse(localStorage.getItem('apiConfig') || JSON.stringify(defaultApiConfig)));
+  const [params, setParams] = useState<Params>(() => JSON.parse(localStorage.getItem('params') || JSON.stringify(defaultParams)));
   const [rightTab, setRightTab] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
@@ -53,6 +59,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem('chats', JSON.stringify(chats)); }, [chats]);
   useEffect(() => { localStorage.setItem('folders', JSON.stringify(folders)); }, [folders]);
   useEffect(() => { localStorage.setItem('apiConfig', JSON.stringify(api)); }, [api]);
+  useEffect(() => { localStorage.setItem('params', JSON.stringify(params)); }, [params]);
   useEffect(() => { if (activeId) localStorage.setItem('activeChatId', activeId); }, [activeId]);
 
   const activeChat = chats.find(c => c.id === activeId) || chats[0] || null;
@@ -60,8 +67,7 @@ export default function App() {
   // Actions
   const handleCreateChat = (folderId?: string) => {
     const newChat: Chat = {
-      id: Date.now().toString(), title: 'New Chat', folderId, messages: [],
-      systemPrompt: 'You are a helpful assistant.', temperature: 1.0, limitLength: false, enableThinking: false
+      id: Date.now().toString(), title: 'New Chat', folderId, messages: []
     };
     setChats([newChat, ...chats]);
     setActiveId(newChat.id);
@@ -100,12 +106,12 @@ export default function App() {
     let tokenCount = 0;
 
     try {
-      const systemMsg = activeChat.systemPrompt ? [{ role: 'system', content: activeChat.systemPrompt + (activeChat.enableThinking ? '\nThink step by step before answering.' : '') }] : [];
+      const systemMsg = params.systemPrompt ? [{ role: 'system', content: params.systemPrompt + (params.enableThinking ? '\nThink step by step before answering.' : '') }] : [];
       const stream = await openai.chat.completions.create({
         model: api.modelName,
         messages: [...systemMsg, ...updatedMsgs.map(m => ({ role: m.role, content: m.content }))] as any,
-        temperature: activeChat.temperature,
-        max_tokens: activeChat.limitLength ? 150 : undefined,
+        temperature: params.temperature,
+        max_tokens: params.limitLength ? 150 : undefined,
         stream: true,
       }, { signal: abortControllerRef.current.signal });
 
@@ -381,7 +387,7 @@ export default function App() {
                     <Stack direction="row" spacing={1}>
                       <Tooltip title="Attach"><IconButton size="small" color="primary"><Add /></IconButton></Tooltip>
                       <Tooltip title="Tools"><IconButton size="small"><Build fontSize="small" /></IconButton></Tooltip>
-                      <Button size="small" startIcon={<Psychology />} variant={activeChat.enableThinking ? 'contained' : 'outlined'} onClick={() => updateChatProp(activeChat.id, 'enableThinking', !activeChat.enableThinking)} sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Think</Button>
+                      <Button size="small" startIcon={<Psychology />} variant={params.enableThinking ? 'contained' : 'outlined'} onClick={() => setParams({ ...params, enableThinking: !params.enableThinking })} sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Think</Button>
                       {api.vision && <Button size="small" startIcon={<Visibility />} variant="outlined" sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Vision</Button>}
                     </Stack>
                     <Tooltip title="Send message"><IconButton onClick={() => handleSend()} disabled={!inputValue.trim() || loading} color="primary" sx={{ bgcolor: inputValue.trim() ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }}><Send fontSize="small" /></IconButton></Tooltip>
@@ -409,19 +415,13 @@ export default function App() {
               {rightTab === 1 ? (
                 <Stack spacing={2}>
                   <Typography variant="subtitle2" fontWeight="bold">Model Parameters</Typography>
-                  <Box p={1.5} border="1px solid #e5e5e7" borderRadius={2}>
-                    <Typography fontSize={12} color="text.secondary" mb={0.5}>Preset</Typography>
-                    <Select fullWidth size="small" value="unsaved">
-                      <MenuItem value="unsaved">Unsaved Preset</MenuItem>
-                    </Select>
-                  </Box>
 
                   <Accordion defaultExpanded disableGutters elevation={0} sx={{ borderBottom: '1px solid #e5e5e7' }}>
                     <AccordionSummary expandIcon={<ExpandMore />}>
                       <Typography fontSize={13} fontWeight="bold">System Prompt</Typography>
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 0, pb: 2 }}>
-                      <TextField fullWidth multiline rows={3} size="small" value={activeChat.systemPrompt} onChange={e => updateChatProp(activeChat.id, 'systemPrompt', e.target.value)} />
+                      <TextField placeholder="Enter system prompt..." fullWidth multiline rows={3} size="small" value={params.systemPrompt} onChange={e => setParams({ ...params, systemPrompt: e.target.value })} />
                     </AccordionDetails>
                   </Accordion>
 
@@ -430,7 +430,7 @@ export default function App() {
                       <Typography fontSize={13} fontWeight="bold">Custom Fields</Typography>
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 0, pb: 2 }}>
-                      <FormControlLabel control={<Switch checked={activeChat.enableThinking} onChange={e => updateChatProp(activeChat.id, 'enableThinking', e.target.checked)} />}
+                      <FormControlLabel control={<Switch checked={params.enableThinking} onChange={e => setParams({ ...params, enableThinking: e.target.checked })} />}
                         label={<Typography fontSize={13}>Enable Thinking</Typography>} />
                     </AccordionDetails>
                   </Accordion>
@@ -440,9 +440,9 @@ export default function App() {
                       <Typography fontSize={13} fontWeight="bold">Settings</Typography>
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 0, pb: 2 }}>
-                      <Typography fontSize={12} color="text.secondary">Temperature: {activeChat.temperature}</Typography>
-                      <Slider min={0} max={2} step={0.1} value={activeChat.temperature} onChange={(_, val) => updateChatProp(activeChat.id, 'temperature', val as number)} />
-                      <FormControlLabel control={<Checkbox checked={activeChat.limitLength} onChange={(e: any) => updateChatProp(activeChat.id, 'limitLength', e.target.checked)} />}
+                      <Typography fontSize={12} color="text.secondary">Temperature: {params.temperature}</Typography>
+                      <Slider min={0} max={2} step={0.1} value={params.temperature} onChange={(_, val) => setParams({ ...params, temperature: val as number })} />
+                      <FormControlLabel control={<Checkbox checked={params.limitLength} onChange={(e: any) => setParams({ ...params, limitLength: e.target.checked })} />}
                         label={<Typography fontSize={13}>Limit Response Length</Typography>} />
                     </AccordionDetails>
                   </Accordion>

@@ -272,6 +272,33 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     const deleteChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).first();
     await expect(deleteChatBtn).toHaveAttribute('aria-label', 'Delete Chat');
+  });
+
+  test('11. should share and persist global parameters across chats and sessions', async ({ page }) => {
+    // Create Chat A
+    await page.locator('button:has-text("New Chat")').click();
+    await expect(page.locator('text=New Chat').first()).toBeVisible();
+
+    const paramsTab = page.locator('button:has-text("Parameters")');
+    await paramsTab.click();
+
+    // Change System Prompt in Chat A
+    const systemPromptInput = page.getByPlaceholder('Enter system prompt...');
+    await systemPromptInput.fill('You are a coding wizard.');
+
+    // Create Chat B (using the sidebar add icon button)
+    const sidebarNewChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="AddIcon"]') }).first();
+    await sidebarNewChatBtn.click();
+
+    // Verify Chat B shares the same global parameter
+    await expect(page.getByPlaceholder('Enter system prompt...')).toHaveValue('You are a coding wizard.');
+
+    // Reload page (simulating fresh session)
+    await page.reload();
+    await paramsTab.click();
+
+    // Verify settings persisted
+    await expect(page.getByPlaceholder('Enter system prompt...')).toHaveValue('You are a coding wizard.');
 
     const screenshotPath = path.resolve(process.cwd(), './dist/playwright-screenshot.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });
