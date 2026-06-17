@@ -127,10 +127,7 @@ export default function App() {
 
   const handleEditMessage = (msgId: string, newContent: string) => {
     if (!activeChat) return;
-    const idx = activeChat.messages.findIndex(m => m.id === msgId);
-    if (idx === -1) return;
-    const newMsgs = activeChat.messages.slice(0, idx + 1);
-    newMsgs[idx].content = newContent;
+    const newMsgs = activeChat.messages.map(m => m.id === msgId ? { ...m, content: newContent } : m);
     setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: newMsgs } : c));
   };
 

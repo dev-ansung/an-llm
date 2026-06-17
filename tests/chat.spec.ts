@@ -152,8 +152,8 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await page.locator('button:has-text("Save (⌘Enter)")').click();
 
     await expect(page.locator('text=Confirmed Content')).toBeVisible();
-    // Verify editing truncated downstream replies
-    await expect(page.locator('text=Reply')).not.toBeVisible();
+    // Verify editing preserved downstream replies
+    await expect(page.locator('text=Reply')).toBeVisible();
   });
 
   test('6. should support forking conversation into new chats', async ({ page }) => {
