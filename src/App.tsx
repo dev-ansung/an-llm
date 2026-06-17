@@ -8,7 +8,7 @@ import {
 import {
   Search, Folder, Add, MoreVert, Send, Settings, Psychology, Visibility, ContentCopy,
   Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, FolderOpen, Computer, CloudQueue,
-  ArrowForward
+  ArrowForward, History
 } from '@mui/icons-material';
 import OpenAI from 'openai';
 
@@ -28,6 +28,11 @@ const defaultParams: Params = {
 };
 interface FolderType { id: string; name: string; }
 interface ApiConfig { apiKey: string; apiBase: string; modelName: string; vision: boolean; tools: boolean; }
+interface ApiLog {
+  id: string; timestamp: string; url: string;
+  request: { model: string; messages: any[]; temperature: number; max_tokens?: number; stream: boolean; };
+  response?: { status: number; statusText: string; content: string; tokens?: number; speed?: number; duration?: number; error?: string; };
+}
 
 const defaultApiConfig: ApiConfig = {
   apiKey: '', apiBase: 'http://127.0.0.1:1234/v1', modelName: 'google/gemma-4-12b-qat', vision: true, tools: true
@@ -45,7 +50,10 @@ export default function App() {
   const [activeId, setActiveId] = useState<string>(() => localStorage.getItem('activeChatId') || '');
   const [api, setApi] = useState<ApiConfig>(() => JSON.parse(localStorage.getItem('apiConfig') || JSON.stringify(defaultApiConfig)));
   const [params, setParams] = useState<Params>(() => JSON.parse(localStorage.getItem('params') || JSON.stringify(defaultParams)));
-  const [rightTab, setRightTab] = useState(1);
+  const [rightTab, setRightTab] = useState(0);
+  const [apiLogs, setApiLogs] = useState<ApiLog[]>(() => {
+    try { return JSON.parse(localStorage.getItem('apiLogs') || '[]'); } catch { return []; }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [showApiDialog, setShowApiDialog] = useState(false);
@@ -61,6 +69,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem('apiConfig', JSON.stringify(api)); }, [api]);
   useEffect(() => { localStorage.setItem('params', JSON.stringify(params)); }, [params]);
   useEffect(() => { if (activeId) localStorage.setItem('activeChatId', activeId); }, [activeId]);
+  useEffect(() => { localStorage.setItem('apiLogs', JSON.stringify(apiLogs.slice(0, 20))); }, [apiLogs]);
 
   const activeChat = chats.find(c => c.id === activeId) || chats[0] || null;
 
@@ -105,26 +114,55 @@ export default function App() {
     const startTime = Date.now();
     let tokenCount = 0;
 
+    const logId = Date.now().toString() + Math.random().toString();
+    const systemMsg = params.systemPrompt ? [{ role: 'system', content: params.systemPrompt + (params.enableThinking ? '\nThink step by step before answering.' : '') }] : [];
+    const requestMessages = [...systemMsg, ...updatedMsgs.map(m => ({ role: m.role, content: m.content }))];
+    const requestPayload = {
+      model: api.modelName,
+      messages: requestMessages,
+      temperature: params.temperature,
+      max_tokens: params.limitLength ? 150 : undefined,
+      stream: true,
+    };
+
+    const newLog: ApiLog = {
+      id: logId,
+      timestamp: new Date().toLocaleTimeString(),
+      url: `${api.apiBase}/chat/completions`,
+      request: requestPayload,
+      response: { status: 200, statusText: 'Pending', content: '' }
+    };
+    setApiLogs(prev => [newLog, ...prev]);
+
     try {
-      const systemMsg = params.systemPrompt ? [{ role: 'system', content: params.systemPrompt + (params.enableThinking ? '\nThink step by step before answering.' : '') }] : [];
       const stream = await openai.chat.completions.create({
-        model: api.modelName,
-        messages: [...systemMsg, ...updatedMsgs.map(m => ({ role: m.role, content: m.content }))] as any,
-        temperature: params.temperature,
-        max_tokens: params.limitLength ? 150 : undefined,
+        model: requestPayload.model,
+        messages: requestPayload.messages as any,
+        temperature: requestPayload.temperature,
+        max_tokens: requestPayload.max_tokens,
         stream: true,
       }, { signal: abortControllerRef.current.signal });
 
+      let accumulatedContent = '';
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content || '';
         tokenCount++;
+        accumulatedContent += delta;
         const duration = (Date.now() - startTime) / 1000;
+        const speed = Number((tokenCount / duration).toFixed(2));
         setChats(prev => prev.map(c => c.id === activeChat.id ? {
           ...c, messages: c.messages.map(m => m.id === assistantMsgId ? {
-            ...m, content: m.content + delta, tokens: tokenCount, duration, speed: Number((tokenCount / duration).toFixed(2))
+            ...m, content: m.content + delta, tokens: tokenCount, duration, speed
           } : m)
         } : c));
+        setApiLogs(prev => prev.map(l => l.id === logId ? {
+          ...l, response: { status: 200, statusText: 'Streaming', content: accumulatedContent, tokens: tokenCount, speed, duration }
+        } : l));
       }
+
+      setApiLogs(prev => prev.map(l => l.id === logId ? {
+        ...l, response: { ...l.response!, statusText: 'Success' }
+      } : l));
     } catch (e: any) {
       if (e.name !== 'AbortError') {
         const isNetErr = e.message?.includes('Failed to fetch') || e.message?.includes('Connection error') || e.message?.includes('fetch failed');
@@ -132,6 +170,13 @@ export default function App() {
         setChats(prev => prev.map(c => c.id === activeChat.id ? {
           ...c, messages: c.messages.map(m => m.id === assistantMsgId ? { ...m, content: m.content + `\n[Error: ${e.message}]${tip}` } : m)
         } : c));
+        setApiLogs(prev => prev.map(l => l.id === logId ? {
+          ...l, response: { status: 500, statusText: 'Error', content: '', error: e.message || 'Unknown error', duration: (Date.now() - startTime) / 1000 }
+        } : l));
+      } else {
+        setApiLogs(prev => prev.map(l => l.id === logId ? {
+          ...l, response: { status: 499, statusText: 'Aborted', content: '', error: 'Request aborted by user', duration: (Date.now() - startTime) / 1000 }
+        } : l));
       }
     } finally {
       setLoading(false);
@@ -407,12 +452,12 @@ export default function App() {
         {activeChat && (
           <Box width={340} borderLeft="1px solid #e5e5e7" bgcolor="#ffffff" display="flex" flexDirection="column">
             <Tabs value={rightTab} onChange={(_, v) => setRightTab(v)} variant="fullWidth" sx={{ borderBottom: '1px solid #e5e5e7' }}>
-              <Tab icon={<Build />} label="Tools" />
               <Tab icon={<Tune />} label="Parameters" />
+              <Tab icon={<History />} label="Logs" />
             </Tabs>
             
             <Box flex={1} overflow="auto" p={2}>
-              {rightTab === 1 ? (
+              {rightTab === 0 ? (
                 <Stack spacing={2}>
                   <Typography variant="subtitle2" fontWeight="bold">Model Parameters</Typography>
 
@@ -448,9 +493,119 @@ export default function App() {
                   </Accordion>
                 </Stack>
               ) : (
-                <Stack spacing={2} justifyContent="center" alignItems="center" height="100%" color="text.secondary">
-                  <Build fontSize="large" />
-                  <Typography fontSize={13}>No tools enabled for Gemma-4.</Typography>
+                <Stack spacing={2} height="100%">
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="subtitle2" fontWeight="bold">API Call Logs</Typography>
+                    <Button size="small" variant="text" onClick={() => setApiLogs([])} disabled={apiLogs.length === 0} sx={{ textTransform: 'none', color: '#ff3b30' }}>
+                      Clear Logs
+                    </Button>
+                  </Stack>
+
+                  {apiLogs.length === 0 ? (
+                    <Stack spacing={1} justifyContent="center" alignItems="center" flex={1} color="text.secondary">
+                      <History fontSize="large" />
+                      <Typography fontSize={13}>No API calls recorded yet.</Typography>
+                    </Stack>
+                  ) : (
+                    <Stack spacing={1} overflow="auto" sx={{ maxHeight: 'calc(100vh - 160px)' }}>
+                      {apiLogs.map(log => (
+                        <Accordion key={log.id} disableGutters elevation={0} sx={{ border: '1px solid #e5e5e7', borderRadius: 1.5, mb: 1, '&:before': { display: 'none' } }}>
+                          <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 1.5, py: 0.5, minHeight: 'auto', '& .MuiAccordionSummary-content': { my: 0.5, alignItems: 'center', justifyContent: 'space-between', display: 'flex', width: '100%', mr: 1 } }}>
+                            <Stack spacing={0.5} alignItems="flex-start" sx={{ overflow: 'hidden', mr: 1 }}>
+                              <Typography fontSize={12} fontWeight="bold" sx={{ color: '#007aff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                POST /chat/completions
+                              </Typography>
+                              <Typography fontSize={10} color="text.secondary" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+                                {log.request.model}
+                              </Typography>
+                            </Stack>
+                            <Stack spacing={0.5} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+                              <Box
+                                component="span"
+                                sx={{
+                                  fontSize: 10,
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  fontWeight: 'bold',
+                                  bgcolor:
+                                    log.response?.statusText === 'Success' ? '#e2f6ea' :
+                                    log.response?.statusText === 'Error' ? '#ffe5e5' :
+                                    log.response?.statusText === 'Aborted' ? '#f4f4f7' : '#fff3cd',
+                                  color:
+                                    log.response?.statusText === 'Success' ? '#34c759' :
+                                    log.response?.statusText === 'Error' ? '#ff3b30' :
+                                    log.response?.statusText === 'Aborted' ? '#8e8e93' : '#ff9500'
+                                }}
+                              >
+                                {log.response?.statusText || 'Pending'}
+                              </Box>
+                              <Typography fontSize={9} color="text.secondary">{log.timestamp}</Typography>
+                            </Stack>
+                          </AccordionSummary>
+                          <AccordionDetails sx={{ p: 1.5, borderTop: '1px solid #e5e5e7', bgcolor: '#fafafa' }}>
+                            <Stack spacing={1.5}>
+                              <Box>
+                                <Typography fontSize={11} fontWeight="bold" color="text.secondary" gutterBottom>Request URL</Typography>
+                                <Typography fontSize={11} sx={{ wordBreak: 'break-all', fontFamily: 'monospace', bgcolor: '#f4f4f7', p: 0.5, borderRadius: 0.5 }}>{log.url}</Typography>
+                              </Box>
+                              
+                              <Box>
+                                <Typography fontSize={11} fontWeight="bold" color="text.secondary" gutterBottom>Request Payload</Typography>
+                                <pre style={{ fontSize: 10, background: '#f4f4f7', padding: 6, borderRadius: 4, overflowX: 'auto', margin: 0, fontFamily: 'monospace' }}>
+                                  {JSON.stringify(log.request, null, 2)}
+                                </pre>
+                              </Box>
+
+                              <Box>
+                                <Typography fontSize={11} fontWeight="bold" color="text.secondary" gutterBottom>Response Metrics</Typography>
+                                <Stack direction="row" spacing={2} sx={{ bgcolor: '#f4f4f7', p: 1, borderRadius: 1 }}>
+                                  <Box>
+                                    <Typography fontSize={9} color="text.secondary">Status</Typography>
+                                    <Typography fontSize={11} fontWeight="bold">{log.response?.status} {log.response?.statusText}</Typography>
+                                  </Box>
+                                  {log.response?.duration && (
+                                    <Box>
+                                      <Typography fontSize={9} color="text.secondary">Duration</Typography>
+                                      <Typography fontSize={11} fontWeight="bold">{log.response.duration.toFixed(2)}s</Typography>
+                                    </Box>
+                                  )}
+                                  {log.response?.speed && (
+                                    <Box>
+                                      <Typography fontSize={9} color="text.secondary">Speed</Typography>
+                                      <Typography fontSize={11} fontWeight="bold">{log.response.speed} tok/s</Typography>
+                                    </Box>
+                                  )}
+                                  {log.response?.tokens && (
+                                    <Box>
+                                      <Typography fontSize={9} color="text.secondary">Tokens</Typography>
+                                      <Typography fontSize={11} fontWeight="bold">{log.response.tokens}</Typography>
+                                    </Box>
+                                  )}
+                                </Stack>
+                              </Box>
+
+                              {log.response?.error ? (
+                                <Box>
+                                  <Typography fontSize={11} fontWeight="bold" color="error" gutterBottom>Error Log</Typography>
+                                  <pre style={{ fontSize: 10, background: '#ffe5e5', color: '#ff3b30', padding: 6, borderRadius: 4, overflowX: 'auto', margin: 0, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                                    {log.response.error}
+                                  </pre>
+                                </Box>
+                              ) : (
+                                <Box>
+                                  <Typography fontSize={11} fontWeight="bold" color="text.secondary" gutterBottom>Response Text Content</Typography>
+                                  <pre style={{ fontSize: 10, background: '#f4f4f7', padding: 6, borderRadius: 4, overflowX: 'auto', margin: 0, fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: 150 }}>
+                                    {log.response?.content || '(Empty)'}
+                                  </pre>
+                                </Box>
+                              )}
+                            </Stack>
+                          </AccordionDetails>
+                        </Accordion>
+                      ))}
+                    </Stack>
+                  )}
                 </Stack>
               )}
             </Box>

@@ -206,13 +206,21 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await page.locator('button:has-text("New Chat")').click();
 
     // Tabs
-    const toolsTab = page.locator('button:has-text("Tools")');
+    const logsTab = page.locator('button:has-text("Logs")');
     const paramsTab = page.locator('button:has-text("Parameters")');
 
-    await expect(toolsTab).toBeVisible();
+    await expect(logsTab).toBeVisible();
     await expect(paramsTab).toBeVisible();
 
-    // Toggle parameters settings
+    // Model Parameters should be visible by default
+    await expect(page.locator('text=Model Parameters')).toBeVisible();
+
+    // Switch to Logs and verify empty state
+    await logsTab.click();
+    await expect(page.locator('text=API Call Logs')).toBeVisible();
+    await expect(page.locator('text=No API calls recorded yet.')).toBeVisible();
+
+    // Switch back to Parameters
     await paramsTab.click();
     await expect(page.locator('text=Model Parameters')).toBeVisible();
 
