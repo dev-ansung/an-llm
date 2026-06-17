@@ -26,6 +26,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Right panel should not be visible when no chat is active
     await expect(page.locator('text=Model Parameters')).not.toBeVisible();
+    await page.screenshot({ path: './dist/chat-1-welcome.png', fullPage: true });
   });
 
   test('2. should handle chat and folder CRUD operations', async ({ page }) => {
@@ -60,6 +61,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify returning to welcome screen
     await expect(page.locator('text=Select a chat or create a new one to begin.')).toBeVisible();
+    await page.screenshot({ path: './dist/chat-2-crud.png', fullPage: true });
   });
 
   test('3. should configure and persist API settings in localStorage', async ({ page }) => {
@@ -83,6 +85,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await page.locator('button:has-text("API Settings")').click();
     await expect(page.getByLabel('API Base URL')).toHaveValue('https://mockapi.openai.com/v1');
     await expect(page.getByLabel('Model Name')).toHaveValue('gpt-4o-mock');
+    await page.screenshot({ path: './dist/chat-3-api-settings.png', fullPage: true });
   });
 
   test('4. should support mocked streaming completions and render performance metrics', async ({ page }) => {
@@ -113,6 +116,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     // Verify statistics (speed, tokens)
     await expect(page.locator('text=tokens')).toBeVisible();
     await expect(page.locator('text=tok/s')).toBeVisible();
+    await page.screenshot({ path: './dist/chat-4-streaming.png', fullPage: true });
   });
 
   test('5. should support inline message editing (Discard vs. Save)', async ({ page }) => {
@@ -154,6 +158,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(page.locator('text=Confirmed Content')).toBeVisible();
     // Verify editing preserved downstream replies
     await expect(page.locator('text=Reply')).toBeVisible();
+    await page.screenshot({ path: './dist/chat-5-editing.png', fullPage: true });
   });
 
   test('6. should support forking conversation into new chats', async ({ page }) => {
@@ -177,6 +182,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Assert a new active chat exists with title suffix
     await expect(page.locator('text=New Chat (Fork)').first()).toBeVisible();
+    await page.screenshot({ path: './dist/chat-6-forking.png', fullPage: true });
   });
 
   test('7. should support deleting messages instantly from conversation list', async ({ page }) => {
@@ -200,6 +206,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify deletion in UI
     await expect(page.locator('text=Deletable message')).not.toBeVisible();
+    await page.screenshot({ path: './dist/chat-7-deletion.png', fullPage: true });
   });
 
   test('8. should toggle settings tabs and parameters', async ({ page }) => {
@@ -229,6 +236,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(thinkingSwitch).not.toBeChecked();
     await thinkingSwitch.click();
     await expect(thinkingSwitch).toBeChecked();
+    await page.screenshot({ path: './dist/chat-8-toggles.png', fullPage: true });
   });
 
   test('9. should support continuing assistant messages', async ({ page }) => {
@@ -269,6 +277,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify continuation text is appended to the same assistant message
     await expect(page.locator('text=Once upon a time, there was a model.')).toBeVisible();
+    await page.screenshot({ path: './dist/chat-9-continuation.png', fullPage: true });
   });
 
   test('10. should have hover tooltips for all icon buttons', async ({ page }) => {
@@ -280,6 +289,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     const deleteChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).first();
     await expect(deleteChatBtn).toHaveAttribute('aria-label', 'Delete Chat');
+    await page.screenshot({ path: './dist/chat-10-tooltips.png', fullPage: true });
   });
 
   test('11. should share and persist global parameters across chats and sessions', async ({ page }) => {
@@ -307,10 +317,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify settings persisted
     await expect(page.getByPlaceholder('Enter system prompt...')).toHaveValue('You are a coding wizard.');
-
-    const screenshotPath = path.resolve(process.cwd(), './dist/playwright-screenshot.png');
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-    console.log(`Successfully completed all tests. Screenshot saved to: ${screenshotPath}`);
+    await page.screenshot({ path: './dist/chat-11-global-parameters.png', fullPage: true });
   });
 
   test('12. should support regenerating assistant messages', async ({ page }) => {
@@ -346,6 +353,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     // Verify it updates to the new response
     await expect(page.locator('text=There was a brave developer')).toBeVisible();
     await expect(page.locator('text=Once upon a time')).not.toBeVisible();
+    await page.screenshot({ path: './dist/chat-12-regeneration.png', fullPage: true });
   });
   
 });

@@ -67,7 +67,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await expect(page.locator('text=Hello! How can I assist?').first()).toBeVisible();
 
     // Take screenshot of logs state
-    const screenshotPath = path.resolve(process.cwd(), './dist/playwright-logs-screenshot.png');
+    const screenshotPath = path.resolve(process.cwd(), './dist/logs-1-success.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`Saved logs screenshot to: ${screenshotPath}`);
   });
@@ -109,6 +109,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
 
     // Verify list is empty
     await expect(page.locator('text=No API calls recorded yet.')).toBeVisible();
+    await page.screenshot({ path: './dist/logs-2-error-clear.png', fullPage: true });
   });
 
 });
