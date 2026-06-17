@@ -136,9 +136,7 @@ export default function App() {
 
   const handleDeleteMessage = (msgId: string) => {
     if (!activeChat) return;
-    if (confirm('Delete this message?')) {
-      setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: c.messages.filter(m => m.id !== msgId) } : c));
-    }
+    setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: c.messages.filter(m => m.id !== msgId) } : c));
   };
 
   const handleForkChat = (msgId: string) => {

@@ -91,12 +91,6 @@ test('verify standalone chat app functionality and layout with mocked stream', a
   // Delete the edited user message (the second DeleteIcon button in the DOM; index 0 is in the header)
   const userDeleteBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).nth(1);
   
-  // Set up confirm dialog handler
-  page.once('dialog', async dialog => {
-    expect(dialog.type()).toBe('confirm');
-    await dialog.accept();
-  });
-  
   await userDeleteBtn.click();
   
   // Verify that the user message is gone from the UI
