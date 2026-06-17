@@ -6,8 +6,8 @@ import {
   DialogContent, DialogActions, Tooltip, CircularProgress, ThemeProvider, createTheme, Checkbox
 } from '@mui/material';
 import {
-  Search, Add, MoreVert, Send, Settings, Psychology, Visibility, ContentCopy,
-  Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, Computer, CloudQueue,
+  Search, Add, MoreVert, Send, Settings, Psychology, ContentCopy,
+  Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Computer, CloudQueue,
   ArrowForward, History, AttachFile, Image
 } from '@mui/icons-material';
 import OpenAI from 'openai';
@@ -31,7 +31,7 @@ interface Params {
 const defaultParams: Params = {
   systemPrompt: 'You are Gemma, a large language model.', temperature: 1.0, limitLength: false, enableThinking: false
 };
-interface ApiConfig { apiKey: string; apiBase: string; modelName: string; vision: boolean; tools: boolean; }
+interface ApiConfig { apiKey: string; apiBase: string; modelName: string; }
 interface ApiLog {
   id: string; timestamp: string; url: string;
   request: { model: string; messages: any[]; temperature: number; max_tokens?: number; stream: boolean; };
@@ -39,7 +39,7 @@ interface ApiLog {
 }
 
 const defaultApiConfig: ApiConfig = {
-  apiKey: '', apiBase: 'http://127.0.0.1:1234/v1', modelName: 'google/gemma-4-12b-qat', vision: true, tools: true
+  apiKey: '', apiBase: 'http://127.0.0.1:1234/v1', modelName: 'google/gemma-4-12b-qat'
 };
 
 const theme = createTheme({
@@ -135,6 +135,32 @@ export default function App() {
     e.target.value = '';
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf('image') !== -1) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          const newAttachment: Attachment = {
+            id: Date.now().toString() + Math.random().toString(),
+            name: file.name || `pasted-image-${Date.now()}.png`,
+            type: file.type,
+            content: dataUrl,
+            isImage: true
+          };
+          setAttachments(prev => [...prev, newAttachment]);
+        };
+        reader.readAsDataURL(file);
+        e.preventDefault();
+      }
+    }
+  };
+
   const handleSend = async (continueId?: string, regenerateId?: string) => {
     if (!activeChat || loading) return;
     let updatedMsgs: Message[];
@@ -191,7 +217,7 @@ export default function App() {
             const filesStr = m.files.map(f => `[Attached File: ${f.name}]\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n');
             textContent = textContent ? `${filesStr}\n\n${textContent}` : filesStr;
           }
-          if (m.images && m.images.length > 0 && api.vision) {
+          if (m.images && m.images.length > 0) {
             const contentBlocks: any[] = [{ type: 'text', text: textContent }];
             m.images.forEach(img => {
               contentBlocks.push({
@@ -558,13 +584,11 @@ export default function App() {
                     </Stack>
                   )}
                   <TextField fullWidth multiline maxRows={4} placeholder="Send a message to the model..." value={inputValue} onChange={e => setInputValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} variant="standard" InputProps={{ disableUnderline: true }} />
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} onPaste={handlePaste} variant="standard" InputProps={{ disableUnderline: true }} />
                   <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
                     <Stack direction="row" spacing={1}>
                       <Tooltip title="Attach"><IconButton size="small" color="primary" onClick={e => setAttachAnchorEl(e.currentTarget)} data-testid="attach-button"><Add /></IconButton></Tooltip>
-                      <Tooltip title="Tools"><IconButton size="small"><Build fontSize="small" /></IconButton></Tooltip>
                       <Button size="small" startIcon={<Psychology />} variant={params.enableThinking ? 'contained' : 'outlined'} onClick={() => setParams({ ...params, enableThinking: !params.enableThinking })} sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Think</Button>
-                      {api.vision && <Button size="small" startIcon={<Visibility />} variant="outlined" sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Vision</Button>}
                     </Stack>
                     <Tooltip title="Send message"><IconButton onClick={() => handleSend()} disabled={(!inputValue.trim() && attachments.length === 0) || loading} color="primary" sx={{ bgcolor: (inputValue.trim() || attachments.length > 0) ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }} data-testid="send-button"><Send fontSize="small" /></IconButton></Tooltip>
                   </Stack>
@@ -804,8 +828,7 @@ export default function App() {
               <TextField label="API Base URL" size="small" value={api.apiBase} onChange={e => setApi({ ...api, apiBase: e.target.value })} />
               <TextField label="Model Name" size="small" value={api.modelName} onChange={e => setApi({ ...api, modelName: e.target.value })} />
               <TextField label="API Key (optional)" size="small" type="password" value={api.apiKey} onChange={e => setApi({ ...api, apiKey: e.target.value })} />
-              <FormControlLabel control={<Switch checked={api.vision} onChange={e => setApi({ ...api, vision: e.target.checked })} />} label="Supports Vision" />
-              <FormControlLabel control={<Switch checked={api.tools} onChange={e => setApi({ ...api, tools: e.target.checked })} />} label="Supports Tools" />
+
               <Typography fontSize={11} color="text.secondary" sx={{ mt: 1, bgcolor: '#f4f4f7', p: 1, borderRadius: 1 }}>
                 <strong>CORS Tip:</strong> Local engines require CORS headers. Start Ollama with OLLAMA_ORIGINS="*" or enable CORS in LM Studio server settings.
               </Typography>

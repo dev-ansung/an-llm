@@ -170,4 +170,45 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
 
     await page.screenshot({ path: './dist/attachments-3-files.png', fullPage: true });
   });
+
+  test('4. should support pasting image from clipboard', async ({ page }) => {
+    // Create new chat
+    await page.locator('button:has-text("New Chat")').click();
+
+    // Focus on input
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.focus();
+
+    // Trigger paste event with an image in browser context
+    await page.evaluate(() => {
+      const base64Png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const byteCharacters = atob(base64Png);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      const file = new File([blob], 'clipboard-pasted.png', { type: 'image/png' });
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      
+      const textarea = document.querySelector('textarea');
+      if (textarea) {
+        const pasteEvent = new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dataTransfer
+        });
+        textarea.dispatchEvent(pasteEvent);
+      }
+    });
+
+    // Verify image preview is staged
+    await expect(page.locator('[data-testid="staged-attachments-preview"]')).toBeVisible();
+    await expect(page.locator('[data-testid="staged-image"]')).toBeVisible();
+
+    await page.screenshot({ path: './dist/attachments-4-paste.png', fullPage: true });
+  });
 });
