@@ -28,6 +28,7 @@ interface ChatPanelProps {
   handleDeleteMessage: (msgId: string) => void;
   handleForkChat: (msgId: string) => void;
   handleMenuAction: (action: 'delete' | 'rename', targetId?: string) => void;
+  handleStop: () => void;
 }
 
 export function ChatPanel({
@@ -55,7 +56,8 @@ export function ChatPanel({
   handleEditMessage,
   handleDeleteMessage,
   handleForkChat,
-  handleMenuAction
+  handleMenuAction,
+  handleStop,
 }: ChatPanelProps) {
   return (
     <Box flex={1} display="flex" flexDirection="column" bgcolor="#ffffff">
@@ -348,17 +350,55 @@ export function ChatPanel({
                     Think
                   </Button>
                 </Stack>
-                <Tooltip title="Send message">
-                  <IconButton
-                    onClick={() => handleSend()}
-                    disabled={(!inputValue.trim() && attachments.length === 0) || loading}
-                    color="primary"
-                    sx={{ bgcolor: (inputValue.trim() || attachments.length > 0) ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }}
-                    data-testid="send-button"
-                  >
-                    <Send fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                {loading ? (
+                  <Stack direction="row" alignItems="center" data-testid="ongoing-generation-controls">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      {params.limitLength ? (
+                        <>
+                          <CircularProgress
+                            variant="determinate"
+                            value={Math.min(100, Math.round((((activeChat?.messages?.[activeChat.messages.length - 1]?.tokens) || 0) / 150) * 100))}
+                            size={16}
+                            thickness={5}
+                          />
+                          <Typography fontSize={11} color="text.secondary" fontWeight="bold" sx={{ minWidth: 28, textAlign: 'right' }}>
+                            {Math.min(100, Math.round((((activeChat?.messages?.[activeChat.messages.length - 1]?.tokens) || 0) / 150) * 100))}%
+                          </Typography>
+                        </>
+                      ) : (
+                        <CircularProgress size={16} thickness={5} />
+                      )}
+                    </Stack>
+                    <Box width="1px" height={20} bgcolor="#e5e5e7" mx={1.5} />
+                    <Tooltip title="Stop generation">
+                      <IconButton
+                        onClick={handleStop}
+                        data-testid="stop-button"
+                        sx={{
+                          bgcolor: '#1d1d1f',
+                          color: '#ffffff',
+                          width: 28,
+                          height: 28,
+                          '&:hover': { bgcolor: '#000000' }
+                        }}
+                      >
+                        <Box sx={{ width: 8, height: 8, bgcolor: '#ffffff', borderRadius: 0.25 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                ) : (
+                  <Tooltip title="Send message">
+                    <IconButton
+                      onClick={() => handleSend()}
+                      disabled={(!inputValue.trim() && attachments.length === 0) || loading}
+                      color="primary"
+                      sx={{ bgcolor: (inputValue.trim() || attachments.length > 0) ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }}
+                      data-testid="send-button"
+                    >
+                      <Send fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Stack>
             </Box>
             <input

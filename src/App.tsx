@@ -57,6 +57,7 @@ export default function App() {
           handleDeleteMessage={chatState.handleDeleteMessage}
           handleForkChat={chatState.handleForkChat}
           handleMenuAction={chatState.handleMenuAction}
+          handleStop={chatState.handleStop}
         />
 
         {/* Right Sidebar (Settings) */}

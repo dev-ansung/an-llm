@@ -279,7 +279,10 @@ export function useChatState() {
         ...l, response: { ...l.response!, statusText: 'Success' }
       } : l));
     } catch (e: any) {
-      if (e.name !== 'AbortError') {
+      const isAbort = e.name === 'AbortError' || 
+                      e.name === 'APIUserAbortError' || 
+                      e.message?.toLowerCase().includes('abort');
+      if (!isAbort) {
         const isNetErr = e.message?.includes('Failed to fetch') || e.message?.includes('Connection error') || e.message?.includes('fetch failed');
         const tip = isNetErr ? '\n\n[CORS / Connection Error]\nEnsure your local model server has CORS enabled:\n• Ollama: OLLAMA_ORIGINS="*" ollama serve\n• LM Studio: Enable "CORS" in Server settings\n• Llama.cpp: Run with --cors' : '';
         setChats(prev => prev.map(c => c.id === activeChat.id ? {
@@ -338,6 +341,14 @@ export function useChatState() {
     setAnchorEl(null);
   };
 
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
   return {
     chats, setChats,
     activeId, setActiveId,
@@ -365,6 +376,7 @@ export function useChatState() {
     handleEditMessage,
     handleDeleteMessage,
     handleForkChat,
-    handleMenuAction
+    handleMenuAction,
+    handleStop
   };
 }

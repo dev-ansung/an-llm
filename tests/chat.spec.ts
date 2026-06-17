@@ -346,5 +346,34 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(page.locator('text=Once upon a time')).not.toBeVisible();
     await page.screenshot({ path: './dist/chat-12-regeneration.png', fullPage: true });
   });
+
+  test('13. should support stopping an ongoing LLM generation call', async ({ page }) => {
+    // Set up endpoint mock to stall response forever
+    await page.route('**/v1/chat/completions', async (route) => {
+      await new Promise(() => {});
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Write something long');
+    await input.press('Enter');
+
+    // Verify stop button is visible during loading
+    const stopBtn = page.locator('[data-testid="stop-button"]');
+    await expect(stopBtn).toBeVisible();
+
+    // Click the stop button to abort
+    await stopBtn.click();
+
+    // Verify loading controls are replaced by standard send button
+    await expect(stopBtn).not.toBeVisible();
+    await expect(page.locator('[data-testid="send-button"]')).toBeVisible();
+
+    // Switch to Logs panel and verify log entry is recorded as Aborted
+    await page.locator('button:has-text("Logs")').click();
+    await expect(page.locator('text=Aborted').first()).toBeVisible();
+
+    await page.screenshot({ path: './dist/chat-13-stop-generation.png', fullPage: true });
+  });
   
 });
