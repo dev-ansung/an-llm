@@ -6,8 +6,8 @@ import {
   DialogContent, DialogActions, Tooltip, CircularProgress, ThemeProvider, createTheme, Checkbox
 } from '@mui/material';
 import {
-  Search, Folder, Add, MoreVert, Send, Settings, Psychology, Visibility, ContentCopy,
-  Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, FolderOpen, Computer, CloudQueue,
+  Search, Add, MoreVert, Send, Settings, Psychology, Visibility, ContentCopy,
+  Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, Computer, CloudQueue,
   ArrowForward, History
 } from '@mui/icons-material';
 import OpenAI from 'openai';
@@ -18,7 +18,7 @@ interface Message {
   model?: string; tokens?: number; speed?: number; duration?: number; stopReason?: string;
 }
 interface Chat {
-  id: string; title: string; folderId?: string; messages: Message[];
+  id: string; title: string; messages: Message[];
 }
 interface Params {
   systemPrompt: string; temperature: number; limitLength: boolean; enableThinking: boolean;
@@ -26,7 +26,6 @@ interface Params {
 const defaultParams: Params = {
   systemPrompt: 'You are Gemma, a large language model.', temperature: 1.0, limitLength: false, enableThinking: false
 };
-interface FolderType { id: string; name: string; }
 interface ApiConfig { apiKey: string; apiBase: string; modelName: string; vision: boolean; tools: boolean; }
 interface ApiLog {
   id: string; timestamp: string; url: string;
@@ -46,7 +45,6 @@ const theme = createTheme({
 export default function App() {
   // State
   const [chats, setChats] = useState<Chat[]>(() => JSON.parse(localStorage.getItem('chats') || '[]'));
-  const [folders, setFolders] = useState<FolderType[]>(() => JSON.parse(localStorage.getItem('folders') || '[]'));
   const [activeId, setActiveId] = useState<string>(() => localStorage.getItem('activeChatId') || '');
   const [api, setApi] = useState<ApiConfig>(() => JSON.parse(localStorage.getItem('apiConfig') || JSON.stringify(defaultApiConfig)));
   const [params, setParams] = useState<Params>(() => JSON.parse(localStorage.getItem('params') || JSON.stringify(defaultParams)));
@@ -58,14 +56,13 @@ export default function App() {
   const [inputValue, setInputValue] = useState('');
   const [showApiDialog, setShowApiDialog] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<{ el: HTMLButtonElement; id: string; isFolder: boolean } | null>(null);
+  const [anchorEl, setAnchorEl] = useState<{ el: HTMLButtonElement; id: string } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sync to LocalStorage
   useEffect(() => { localStorage.setItem('chats', JSON.stringify(chats)); }, [chats]);
-  useEffect(() => { localStorage.setItem('folders', JSON.stringify(folders)); }, [folders]);
   useEffect(() => { localStorage.setItem('apiConfig', JSON.stringify(api)); }, [api]);
   useEffect(() => { localStorage.setItem('params', JSON.stringify(params)); }, [params]);
   useEffect(() => { if (activeId) localStorage.setItem('activeChatId', activeId); }, [activeId]);
@@ -83,17 +80,12 @@ export default function App() {
   const activeChat = chats.find(c => c.id === activeId) || chats[0] || null;
 
   // Actions
-  const handleCreateChat = (folderId?: string) => {
+  const handleCreateChat = () => {
     const newChat: Chat = {
-      id: Date.now().toString(), title: 'New Chat', folderId, messages: []
+      id: Date.now().toString(), title: 'New Chat', messages: []
     };
     setChats([newChat, ...chats]);
     setActiveId(newChat.id);
-  };
-
-  const handleCreateFolder = () => {
-    const name = prompt('Folder Name:');
-    if (name) setFolders([...folders, { id: Date.now().toString(), name }]);
   };
 
   const handleSend = async (continueId?: string, regenerateId?: string) => {
@@ -228,28 +220,19 @@ export default function App() {
     setActiveId(newChat.id);
   };
 
-  const handleMenuAction = (action: 'delete' | 'rename' | 'move', targetId?: string) => {
+  const handleMenuAction = (action: 'delete' | 'rename', targetId?: string) => {
     const id = targetId || anchorEl?.id;
     if (!id) return;
     if (action === 'delete') {
-      if (confirm('Delete item?')) {
-        if (anchorEl?.isFolder) {
-          setFolders(folders.filter(f => f.id !== id));
-          setChats(chats.map(c => c.folderId === id ? { ...c, folderId: undefined } : c));
-        } else {
-          setChats(chats.filter(c => c.id !== id));
-          if (activeId === id) setActiveId('');
-        }
+      if (confirm('Delete chat?')) {
+        setChats(chats.filter(c => c.id !== id));
+        if (activeId === id) setActiveId('');
       }
     } else if (action === 'rename') {
       const name = prompt('New name:');
       if (name) {
-        if (anchorEl?.isFolder) setFolders(folders.map(f => f.id === id ? { ...f, name } : f));
-        else updateChatProp(id, 'title', name);
+        updateChatProp(id, 'title', name);
       }
-    } else if (action === 'move') {
-      const folderId = prompt('Folder ID (leave empty for root):') || undefined;
-      updateChatProp(id, 'folderId', folderId);
     }
     setAnchorEl(null);
   };
@@ -267,37 +250,11 @@ export default function App() {
             <TextField fullWidth size="small" placeholder="Search chats..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
           </Box>
-          <ListItemButton onClick={handleCreateFolder} sx={{ mx: 2, borderRadius: 1, py: 0.5 }}>
-            <FolderOpen fontSize="small" sx={{ mr: 1, color: '#8e8e93' }} />
-            <ListItemText primary="New Folder" primaryTypographyProps={{ fontSize: 13 }} />
-          </ListItemButton>
           <Box flex={1} overflow="auto" px={2} mt={1}>
-            {folders.map(f => (
-              <Box key={f.id} mb={1}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Folder fontSize="small" sx={{ color: '#007aff' }} />
-                    <Typography fontSize={13} fontWeight="bold">{f.name}</Typography>
-                  </Stack>
-                  <Tooltip title="Folder Options"><IconButton size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: f.id, isFolder: true })}><MoreVert fontSize="small" /></IconButton></Tooltip>
-                </Stack>
-                <List dense sx={{ pl: 2, py: 0 }}>
-                  {chats.filter(c => c.folderId === f.id && c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
-                    <ListItem key={c.id} disablePadding secondaryAction={
-                      <Tooltip title="Chat Options"><IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id, isFolder: false })}><MoreVert fontSize="small" /></IconButton></Tooltip>
-                    }>
-                      <ListItemButton selected={activeId === c.id} onClick={() => setActiveId(c.id)} sx={{ borderRadius: 1 }}>
-                        <ListItemText primary={c.title} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
-                      </ListItemButton>
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
-            ))}
             <List dense>
-              {chats.filter(c => !c.folderId && c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
+              {chats.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
                 <ListItem key={c.id} disablePadding secondaryAction={
-                  <Tooltip title="Chat Options"><IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id, isFolder: false })}><MoreVert fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Chat Options"><IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id })}><MoreVert fontSize="small" /></IconButton></Tooltip>
                 }>
                   <ListItemButton selected={activeId === c.id} onClick={() => setActiveId(c.id)} sx={{ borderRadius: 1 }}>
                     <ListItemText primary={c.title} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
@@ -634,7 +591,6 @@ export default function App() {
         <Popover open={Boolean(anchorEl)} anchorEl={anchorEl?.el} onClose={() => setAnchorEl(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
           <List dense sx={{ p: 0.5 }}>
             <ListItemButton onClick={() => handleMenuAction('rename')}><ListItemText primary="Rename" /></ListItemButton>
-            {!anchorEl?.isFolder && <ListItemButton onClick={() => handleMenuAction('move')}><ListItemText primary="Move to Folder" /></ListItemButton>}
             <ListItemButton onClick={() => handleMenuAction('delete')} sx={{ color: 'error.main' }}><ListItemText primary="Delete" /></ListItemButton>
           </List>
         </Popover>

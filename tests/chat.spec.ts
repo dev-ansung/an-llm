@@ -21,7 +21,6 @@ test.describe('LLM Chat Application Integration Suite', () => {
     // Sidebar elements
     await expect(page.locator('text=Chats')).toBeVisible();
     await expect(page.getByPlaceholder('Search chats...')).toBeVisible();
-    await expect(page.locator('text=New Folder')).toBeVisible();
     await expect(page.locator('button:has-text("API Settings")')).toBeVisible();
 
     // Right panel should not be visible when no chat is active
@@ -29,7 +28,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await page.screenshot({ path: './dist/chat-1-welcome.png', fullPage: true });
   });
 
-  test('2. should handle chat and folder CRUD operations', async ({ page }) => {
+  test('2. should handle chat CRUD operations', async ({ page }) => {
     // Create Chat
     await page.locator('button:has-text("New Chat")').click();
     await expect(page.locator('text=New Chat').first()).toBeVisible();
@@ -42,14 +41,6 @@ test.describe('LLM Chat Application Integration Suite', () => {
     });
     await headerEditBtn.click();
     await expect(page.locator('text=Humor Hub').first()).toBeVisible();
-
-    // Create Folder
-    page.once('dialog', async dialog => {
-      expect(dialog.type()).toBe('prompt');
-      await dialog.accept('Trump Jokes');
-    });
-    await page.locator('text=New Folder').click();
-    await expect(page.locator('text=Trump Jokes')).toBeVisible();
 
     // Delete Chat
     const headerDeleteBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).first();
