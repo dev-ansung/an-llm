@@ -67,6 +67,15 @@ npm run build
 ```
 The resulting single-file asset will be output to `dist/index.html`. You can double-click this file to run the entire application directly in your browser.
 
+### Deployment (GitHub Pages)
+The repository is configured with a GitHub Actions workflow at `.github/workflows/deploy.yml` to automatically build and host the application on GitHub Pages when you push to the `main` branch.
+
+To configure this in your GitHub repository:
+1. Push this repository to GitHub.
+2. Navigate to **Settings** > **Pages** in the repository.
+3. Under **Build and deployment** > **Source**, change the selection from **Deploy from a branch** to **GitHub Actions**.
+4. The workflow will trigger on the next push and deploy your single-page app.
+
 ---
 
 ## Test Suite
