@@ -107,8 +107,10 @@ export default function App() {
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
+        const isNetErr = e.message?.includes('Failed to fetch') || e.message?.includes('Connection error') || e.message?.includes('fetch failed');
+        const tip = isNetErr ? '\n\n[CORS / Connection Error]\nEnsure your local model server has CORS enabled:\n• Ollama: OLLAMA_ORIGINS="*" ollama serve\n• LM Studio: Enable "CORS" in Server settings\n• Llama.cpp: Run with --cors' : '';
         setChats(prev => prev.map(c => c.id === activeChat.id ? {
-          ...c, messages: c.messages.map(m => m.id === assistantMsgId ? { ...m, content: m.content + `\n[Error: ${e.message}]` } : m)
+          ...c, messages: c.messages.map(m => m.id === assistantMsgId ? { ...m, content: m.content + `\n[Error: ${e.message}]${tip}` } : m)
         } : c));
       }
     } finally {
@@ -378,6 +380,9 @@ export default function App() {
               <TextField label="API Key (optional)" size="small" type="password" value={api.apiKey} onChange={e => setApi({ ...api, apiKey: e.target.value })} />
               <FormControlLabel control={<Switch checked={api.vision} onChange={e => setApi({ ...api, vision: e.target.checked })} />} label="Supports Vision" />
               <FormControlLabel control={<Switch checked={api.tools} onChange={e => setApi({ ...api, tools: e.target.checked })} />} label="Supports Tools" />
+              <Typography fontSize={11} color="text.secondary" sx={{ mt: 1, bgcolor: '#f4f4f7', p: 1, borderRadius: 1 }}>
+                <strong>CORS Tip:</strong> Local engines require CORS headers. Start Ollama with OLLAMA_ORIGINS="*" or enable CORS in LM Studio server settings.
+              </Typography>
             </Stack>
           </DialogContent>
           <DialogActions>
