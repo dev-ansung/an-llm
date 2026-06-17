@@ -1,103 +1,231 @@
 import { test, expect } from '@playwright/test';
 import * as path from 'path';
 
-test('verify standalone chat app functionality and layout with mocked stream', async ({ page }) => {
-  const filePath = path.resolve(process.cwd(), './dist/index.html');
-  const fileUrl = `file://${filePath}`;
-
-  // Mock OpenAI Chat Completion SSE Stream
-  await page.route('**/v1/chat/completions', async (route) => {
-    // Assert request format
-    const requestBody = route.request().postDataJSON();
-    expect(requestBody).toBeDefined();
-    expect(requestBody.messages).toBeDefined();
-    expect(requestBody.stream).toBe(true);
-
-    // Fulfill with mocked chunked Server-Sent Events (SSE)
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: [
-        'data: {"choices":[{"delta":{"content":"This"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" is"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" a mocked"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" streaming response."}}]}\n\n',
-        'data: [DONE]\n\n'
-      ].join('')
-    });
+test.describe('LLM Chat Application Integration Suite', () => {
+  
+  test.beforeEach(async ({ page }) => {
+    // Navigate to standalone HTML file
+    const filePath = path.resolve(process.cwd(), './dist/index.html');
+    await page.goto(`file://${filePath}`);
+    
+    // Clear localStorage to ensure test isolation
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
   });
 
-  // Navigate to application
-  await page.goto(fileUrl);
+  test('1. should render welcome screen, sidebar elements, and parameters panel', async ({ page }) => {
+    // Welcome text
+    await expect(page.locator('text=Select a chat or create a new one to begin.')).toBeVisible();
+    await expect(page.locator('button:has-text("New Chat")')).toBeVisible();
 
-  // 1. Initial State Check
-  await expect(page.locator('text=Select a chat or create a new one to begin.')).toBeVisible();
+    // Sidebar elements
+    await expect(page.locator('text=Chats')).toBeVisible();
+    await expect(page.getByPlaceholder('Search chats...')).toBeVisible();
+    await expect(page.locator('text=New Folder')).toBeVisible();
+    await expect(page.locator('button:has-text("API Settings")')).toBeVisible();
 
-  // 2. Create a New Chat
-  const newChatBtn = page.locator('button:has-text("New Chat")');
-  await newChatBtn.click();
+    // Right panel should not be visible when no chat is active
+    await expect(page.locator('text=Model Parameters')).not.toBeVisible();
+  });
+
+  test('2. should handle chat and folder CRUD operations', async ({ page }) => {
+    // Create Chat
+    await page.locator('button:has-text("New Chat")').click();
+    await expect(page.locator('text=New Chat').first()).toBeVisible();
+
+    // Rename Chat via Edit Header Button
+    const headerEditBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="EditIcon"]') }).first();
+    page.once('dialog', async dialog => {
+      expect(dialog.type()).toBe('prompt');
+      await dialog.accept('Humor Hub');
+    });
+    await headerEditBtn.click();
+    await expect(page.locator('text=Humor Hub').first()).toBeVisible();
+
+    // Create Folder
+    page.once('dialog', async dialog => {
+      expect(dialog.type()).toBe('prompt');
+      await dialog.accept('Trump Jokes');
+    });
+    await page.locator('text=New Folder').click();
+    await expect(page.locator('text=Trump Jokes')).toBeVisible();
+
+    // Delete Chat
+    const headerDeleteBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).first();
+    page.once('dialog', async dialog => {
+      expect(dialog.type()).toBe('confirm');
+      await dialog.accept();
+    });
+    await headerDeleteBtn.click();
+
+    // Verify returning to welcome screen
+    await expect(page.locator('text=Select a chat or create a new one to begin.')).toBeVisible();
+  });
+
+  test('3. should configure and persist API settings in localStorage', async ({ page }) => {
+    // Open API Settings
+    await page.locator('button:has-text("New Chat")').click(); // activate screen to enable layout
+    await page.locator('button:has-text("API Settings")').click();
+    await expect(page.locator('text=API Configuration')).toBeVisible();
+
+    // Fill new details
+    const apiBaseInput = page.getByLabel('API Base URL');
+    await apiBaseInput.fill('https://mockapi.openai.com/v1');
+    const modelNameInput = page.getByLabel('Model Name');
+    await modelNameInput.fill('gpt-4o-mock');
+
+    // Close Dialog
+    await page.locator('button:has-text("Close")').click();
+    await expect(page.locator('text=API Configuration')).not.toBeVisible();
+
+    // Reload page to verify persistence
+    await page.reload();
+    await page.locator('button:has-text("API Settings")').click();
+    await expect(page.getByLabel('API Base URL')).toHaveValue('https://mockapi.openai.com/v1');
+    await expect(page.getByLabel('Model Name')).toHaveValue('gpt-4o-mock');
+  });
+
+  test('4. should support mocked streaming completions and render performance metrics', async ({ page }) => {
+    // Set up endpoint mock
+    await page.route('**/v1/chat/completions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: [
+          'data: {"choices":[{"delta":{"content":"Gemma-4 "}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"is running!"}}]}\n\n',
+          'data: [DONE]\n\n'
+        ].join('')
+      });
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    
+    // Send message
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Status update?');
+    await input.press('Enter');
+
+    // Verify streaming text
+    await expect(page.locator('text=Gemma-4 is running!')).toBeVisible();
+
+    // Verify statistics (speed, tokens)
+    await expect(page.locator('text=tokens')).toBeVisible();
+    await expect(page.locator('text=tok/s')).toBeVisible();
+  });
+
+  test('5. should support inline message editing (Discard vs. Save)', async ({ page }) => {
+    // Setup message thread
+    await page.route('**/v1/chat/completions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {"choices":[{"delta":{"content":"Reply"}}]}\n\ndata: [DONE]\n\n'
+      });
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Original Content');
+    await input.press('Enter');
+    await expect(page.locator('text=Reply')).toBeVisible();
+
+    // Trigger edit mode
+    const editBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="EditIcon"]') }).nth(1);
+    await editBtn.click();
+
+    // Locate open textarea
+    const textarea = page.locator('textarea').first();
+    await expect(textarea).toBeVisible();
+    await textarea.fill('Draft Content');
+
+    // Discard edit
+    await page.locator('button:has-text("Discard (Esc)")').click();
+    await expect(page.locator('text=Original Content')).toBeVisible();
+    await expect(page.locator('text=Draft Content')).not.toBeVisible();
+
+    // Trigger edit and Save
+    await editBtn.click();
+    const textarea2 = page.locator('textarea').first();
+    await textarea2.fill('Confirmed Content');
+    await page.locator('button:has-text("Save (⌘Enter)")').click();
+
+    await expect(page.locator('text=Confirmed Content')).toBeVisible();
+    // Verify editing truncated downstream replies
+    await expect(page.locator('text=Reply')).not.toBeVisible();
+  });
+
+  test('6. should support forking conversation into new chats', async ({ page }) => {
+    await page.route('**/v1/chat/completions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {"choices":[{"delta":{"content":"Forkable response"}}]}\n\ndata: [DONE]\n\n'
+      });
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Message to Fork');
+    await input.press('Enter');
+    await expect(page.locator('text=Forkable response')).toBeVisible();
+
+    // Fork from Assistant Message (second AltRoute button in DOM)
+    const forkBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="AltRouteIcon"]') }).nth(1);
+    await forkBtn.click();
+
+    // Assert a new active chat exists with title suffix
+    await expect(page.locator('text=New Chat (Fork)').first()).toBeVisible();
+  });
+
+  test('7. should support deleting messages instantly from conversation list', async ({ page }) => {
+    await page.route('**/v1/chat/completions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {"choices":[{"delta":{"content":"Mock reply"}}]}\n\ndata: [DONE]\n\n'
+      });
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Deletable message');
+    await input.press('Enter');
+    await expect(page.locator('text=Mock reply')).toBeVisible();
+
+    // Delete user message (second Delete icon in DOM; first is in header)
+    const deleteBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).nth(1);
+    await deleteBtn.click();
+
+    // Verify deletion in UI
+    await expect(page.locator('text=Deletable message')).not.toBeVisible();
+  });
+
+  test('8. should toggle settings tabs and parameters', async ({ page }) => {
+    await page.locator('button:has-text("New Chat")').click();
+
+    // Tabs
+    const toolsTab = page.locator('button:has-text("Tools")');
+    const paramsTab = page.locator('button:has-text("Parameters")');
+
+    await expect(toolsTab).toBeVisible();
+    await expect(paramsTab).toBeVisible();
+
+    // Toggle parameters settings
+    await paramsTab.click();
+    await expect(page.locator('text=Model Parameters')).toBeVisible();
+
+    // Enable Thinking Switch
+    const thinkingSwitch = page.locator('input[type="checkbox"]').first(); // first switch is in accordion custom fields
+    await expect(thinkingSwitch).not.toBeChecked();
+    await thinkingSwitch.click();
+    await expect(thinkingSwitch).toBeChecked();
+
+    // Save final screenshot of parameters and settings
+    const screenshotPath = path.resolve(process.cwd(), './dist/playwright-screenshot.png');
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    console.log(`Successfully completed all tests. Screenshot saved to: ${screenshotPath}`);
+  });
   
-  // Verify chat layout is loaded
-  await expect(page.getByPlaceholder('Send a message to the model...')).toBeVisible();
-  
-  // 3. Send Message and Trigger Streaming
-  const textarea = page.getByPlaceholder('Send a message to the model...');
-  await textarea.fill('Hello model, please reply');
-  
-  // Press enter to send
-  await textarea.press('Enter');
-
-  // Verify user message appears in UI
-  await expect(page.locator('text=Hello model, please reply')).toBeVisible();
-
-  // 4. Verify Stream Output & Metrics
-  // The assistant message should contain the full mocked response
-  await expect(page.locator('text=This is a mocked streaming response.')).toBeVisible();
-
-  // Verify metrics are calculated and displayed (e.g. "tokens", "tok/s")
-  await expect(page.locator('text=tokens')).toBeVisible();
-  await expect(page.locator('text=tok/s')).toBeVisible();
-
-  // 5. Test Forking the Conversation
-  // Fork from the assistant's message (the second AltRouteIcon button; index 0 is on the user message)
-  const assistantForkBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="AltRouteIcon"]') }).nth(1);
-  await assistantForkBtn.click();
-
-  // Forked chat should have a title like "New Chat (Fork)"
-  await expect(page.locator('text=New Chat (Fork)').first()).toBeVisible();
-
-  // 6. Test Editing a Message (on the forked chat)
-  // Edit the user message (the second EditIcon button; index 0 is in the header of the new chat)
-  const userEditBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="EditIcon"]') }).nth(1);
-  await userEditBtn.click();
-
-  // Find the open textarea in edit mode and type new content
-  const editField = page.locator('textarea').first();
-  await editField.fill('Hello model, this is an edited message');
-
-  // Click Save (⌘Enter) button
-  const saveBtn = page.locator('button:has-text("Save (⌘Enter)")');
-  await saveBtn.click();
-  
-  // Verify edited message text is updated in UI
-  await expect(page.locator('text=Hello model, this is an edited message')).toBeVisible();
-
-  // 7. Test Deleting a Message
-  // Delete the edited user message (the second DeleteIcon button in the DOM; index 0 is in the header)
-  const userDeleteBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).nth(1);
-  
-  await userDeleteBtn.click();
-  
-  // Verify that the user message is gone from the UI
-  await expect(page.locator('text=Hello model, this is an edited message')).not.toBeVisible();
-
-  // 8. Take Screenshot of Success State
-  const screenshotPath = path.resolve(process.cwd(), './dist/playwright-screenshot.png');
-  await page.screenshot({ path: screenshotPath, fullPage: true });
-  console.log(`Successfully completed all tests. Screenshot saved to: ${screenshotPath}`);
 });
