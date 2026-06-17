@@ -312,5 +312,40 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`Successfully completed all tests. Screenshot saved to: ${screenshotPath}`);
   });
+
+  test('12. should support regenerating assistant messages', async ({ page }) => {
+    let requestCount = 0;
+    await page.route('**/v1/chat/completions', async (route) => {
+      requestCount++;
+      if (requestCount === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: 'data: {"choices":[{"delta":{"content":"Once upon a time"}}]}\n\ndata: [DONE]\n\n'
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: 'data: {"choices":[{"delta":{"content":"There was a brave developer"}}]}\n\ndata: [DONE]\n\n'
+        });
+      }
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Write a story');
+    await input.press('Enter');
+
+    await expect(page.locator('text=Once upon a time')).toBeVisible();
+
+    // Click regenerate button (Replay)
+    const regenerateBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="ReplayIcon"]') }).first();
+    await regenerateBtn.click();
+
+    // Verify it updates to the new response
+    await expect(page.locator('text=There was a brave developer')).toBeVisible();
+    await expect(page.locator('text=Once upon a time')).not.toBeVisible();
+  });
   
 });

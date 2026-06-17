@@ -71,6 +71,15 @@ export default function App() {
   useEffect(() => { if (activeId) localStorage.setItem('activeChatId', activeId); }, [activeId]);
   useEffect(() => { localStorage.setItem('apiLogs', JSON.stringify(apiLogs.slice(0, 20))); }, [apiLogs]);
 
+  // Abort completion request when active chat changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [activeId]);
+
   const activeChat = chats.find(c => c.id === activeId) || chats[0] || null;
 
   // Actions
@@ -87,17 +96,26 @@ export default function App() {
     if (name) setFolders([...folders, { id: Date.now().toString(), name }]);
   };
 
-  const handleSend = async (continueId?: string) => {
+  const handleSend = async (continueId?: string, regenerateId?: string) => {
     if (!activeChat || loading) return;
     let updatedMsgs: Message[];
     let assistantMsgId: string;
     const isCont = !!continueId;
+    const isRegen = !!regenerateId;
 
     if (isCont) {
       const idx = activeChat.messages.findIndex(m => m.id === continueId);
       if (idx === -1) return;
       updatedMsgs = activeChat.messages.slice(0, idx + 1);
       assistantMsgId = continueId;
+    } else if (isRegen) {
+      const idx = activeChat.messages.findIndex(m => m.id === regenerateId);
+      if (idx === -1) return;
+      updatedMsgs = activeChat.messages.slice(0, idx);
+      assistantMsgId = regenerateId;
+      setChats(chats.map(c => c.id === activeChat.id ? {
+        ...c, messages: c.messages.map(m => m.id === assistantMsgId ? { ...m, content: '', tokens: undefined, duration: undefined, speed: undefined } : m)
+      } : c));
     } else {
       if (!inputValue.trim()) return;
       const userMsg: Message = { id: Date.now().toString(), role: 'user', content: inputValue };
@@ -143,7 +161,7 @@ export default function App() {
         stream: true,
       }, { signal: abortControllerRef.current.signal });
 
-      let accumulatedContent = '';
+      let accumulatedContent = isCont ? (activeChat.messages.find(m => m.id === continueId)?.content || '') : '';
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content || '';
         tokenCount++;
@@ -152,7 +170,7 @@ export default function App() {
         const speed = Number((tokenCount / duration).toFixed(2));
         setChats(prev => prev.map(c => c.id === activeChat.id ? {
           ...c, messages: c.messages.map(m => m.id === assistantMsgId ? {
-            ...m, content: m.content + delta, tokens: tokenCount, duration, speed
+            ...m, content: accumulatedContent, tokens: tokenCount, duration, speed
           } : m)
         } : c));
         setApiLogs(prev => prev.map(l => l.id === logId ? {
@@ -407,7 +425,7 @@ export default function App() {
                               </Stack>
                             )}
                             <Stack direction="row" spacing={0.5}>
-                              <Tooltip title="Regenerate message"><IconButton size="small" onClick={() => handleSend()}><Replay fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Regenerate message"><IconButton size="small" onClick={() => handleSend(undefined, m.id)}><Replay fontSize="inherit" /></IconButton></Tooltip>
                               <Tooltip title="Continue assistant message"><IconButton size="small" onClick={() => handleSend(m.id)}><ArrowForward fontSize="inherit" /></IconButton></Tooltip>
                               <Tooltip title="Fork conversation"><IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton></Tooltip>
                               <Tooltip title="Copy message"><IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton></Tooltip>
