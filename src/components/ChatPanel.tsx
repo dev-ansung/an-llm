@@ -1,5 +1,5 @@
 import { Box, Stack, Typography, TextField, IconButton, Button, CircularProgress, Tooltip, Popover, List, ListItemButton, ListItemText, InputBase } from '@mui/material';
-import { Edit, Delete, AltRoute, ContentCopy, Computer, CloudQueue, Replay, ArrowForward, AttachFile, Add, Psychology, Send, Image } from '@mui/icons-material';
+import { Edit, Delete, AltRoute, ContentCopy, Computer, CloudQueue, Replay, ArrowForward, AttachFile, Add, Psychology, Send, Image, Menu, Settings } from '@mui/icons-material';
 import { Chat, Attachment, Params } from '../types';
 
 interface ChatPanelProps {
@@ -29,6 +29,9 @@ interface ChatPanelProps {
   handleForkChat: (msgId: string) => void;
   handleMenuAction: (action: 'delete' | 'rename', targetId?: string) => void;
   handleStop: () => void;
+  isMobile?: boolean;
+  onToggleLeftDrawer?: () => void;
+  onToggleRightDrawer?: () => void;
 }
 
 export function ChatPanel({
@@ -58,13 +61,33 @@ export function ChatPanel({
   handleForkChat,
   handleMenuAction,
   handleStop,
+  isMobile,
+  onToggleLeftDrawer,
+  onToggleRightDrawer,
 }: ChatPanelProps) {
   return (
     <Box flex={1} display="flex" flexDirection="column" bgcolor="#ffffff">
       {activeChat ? (
         <>
           <Stack direction="row" justifyContent="space-between" alignItems="center" px={3} py={1.5} borderBottom="1px solid #e5e5e7">
-            <Typography variant="subtitle1" fontWeight="bold">{activeChat.title}</Typography>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0, flex: 1 }}>
+              {isMobile && (
+                <IconButton
+                  edge="start"
+                  color="inherit"
+                  aria-label="menu"
+                  onClick={onToggleLeftDrawer}
+                  data-testid="mobile-menu-button"
+                  size="small"
+                  sx={{ mr: 1 }}
+                >
+                  <Menu fontSize="small" />
+                </IconButton>
+              )}
+              <Typography variant="subtitle1" fontWeight="bold" noWrap sx={{ flex: 1 }}>
+                {activeChat.title}
+              </Typography>
+            </Stack>
             <Stack direction="row" spacing={1}>
               <Tooltip title="Rename Chat">
                 <IconButton size="small" onClick={() => handleMenuAction('rename', activeChat.id)}>
@@ -76,6 +99,17 @@ export function ChatPanel({
                   <Delete fontSize="small" />
                 </IconButton>
               </Tooltip>
+              {isMobile && (
+                <Tooltip title="Model Parameters">
+                  <IconButton
+                    size="small"
+                    onClick={onToggleRightDrawer}
+                    data-testid="mobile-settings-button"
+                  >
+                    <Settings fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Stack>
           </Stack>
           
@@ -84,7 +118,7 @@ export function ChatPanel({
               {activeChat.messages.map(m => (
                 <Box key={m.id} alignSelf={m.role === 'user' ? 'flex-end' : 'flex-start'} maxWidth="80%" width="100%">
                   {m.role === 'user' ? (
-                    <Stack spacing={1} width="100%" minWidth={320} alignItems="flex-end">
+                    <Stack spacing={1} width="100%" minWidth={isMobile ? 0 : 320} alignItems="flex-end">
                       <Box
                         sx={{
                           bgcolor: editId === m.id ? '#ffffff' : '#e3e3e7',
@@ -214,7 +248,7 @@ export function ChatPanel({
                       )}
                     </Stack>
                   ) : (
-                    <Stack spacing={1} width="100%" minWidth={400} alignItems="flex-start">
+                    <Stack spacing={1} width="100%" minWidth={isMobile ? 0 : 400} alignItems="flex-start">
                       <Typography fontSize={11} color="text.secondary" fontWeight="bold">{m.model}</Typography>
                       <Box
                         sx={{
@@ -491,10 +525,32 @@ export function ChatPanel({
           </Box>
         </>
       ) : (
-        <Stack flex={1} justifyContent="center" alignItems="center" spacing={2} bgcolor="#fafafa">
-          <Typography color="text.secondary">Select a chat or create a new one to begin.</Typography>
-          <Button onClick={handleCreateChat} startIcon={<Add />} variant="contained">New Chat</Button>
-        </Stack>
+        <>
+          {isMobile && (
+            <Stack direction="row" justifyContent="space-between" alignItems="center" px={3} py={1.5} borderBottom="1px solid #e5e5e7">
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <IconButton
+                  edge="start"
+                  color="inherit"
+                  aria-label="menu"
+                  onClick={onToggleLeftDrawer}
+                  data-testid="mobile-menu-button"
+                  size="small"
+                  sx={{ mr: 1 }}
+                >
+                  <Menu fontSize="small" />
+                </IconButton>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  LLM Chat
+                </Typography>
+              </Stack>
+            </Stack>
+          )}
+          <Stack flex={1} justifyContent="center" alignItems="center" spacing={2} bgcolor="#fafafa">
+            <Typography color="text.secondary">Select a chat or create a new one to begin.</Typography>
+            <Button onClick={handleCreateChat} startIcon={<Add />} variant="contained">New Chat</Button>
+          </Stack>
+        </>
       )}
     </Box>
   );

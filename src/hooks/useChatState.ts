@@ -202,7 +202,7 @@ export function useChatState() {
     setLoading(true);
 
     abortControllerRef.current = new AbortController();
-    const openai = new OpenAI({ apiKey: api.apiKey || 'not-needed', baseURL: api.apiBase, dangerouslyAllowBrowser: true });
+    const openai = new OpenAI({ apiKey: api.apiKey || 'not-needed', baseURL: api.apiBase, dangerouslyAllowBrowser: true, maxRetries: 0 });
     const startTime = Date.now();
     let tokenCount = 0;
 

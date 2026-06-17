@@ -1,4 +1,5 @@
-import { Box, ThemeProvider, createTheme } from '@mui/material';
+import { Box, ThemeProvider, createTheme, useMediaQuery, Drawer, useTheme } from '@mui/material';
+import { useState } from 'react';
 import { useChatState } from './hooks/useChatState';
 import { Sidebar } from './components/Sidebar';
 import { ChatPanel } from './components/ChatPanel';
@@ -12,23 +13,59 @@ const theme = createTheme({
 
 export default function App() {
   const chatState = useChatState();
+  const uiTheme = useTheme();
+  const isMobile = useMediaQuery(uiTheme.breakpoints.down('md'));
+
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [mobileRightOpen, setMobileRightOpen] = useState(false);
 
   return (
     <ThemeProvider theme={theme}>
       <Box display="flex" height="100vh" overflow="hidden">
         {/* Left Sidebar */}
-        <Sidebar
-          chats={chatState.chats}
-          activeId={chatState.activeId}
-          setActiveId={chatState.setActiveId}
-          searchQuery={chatState.searchQuery}
-          setSearchQuery={chatState.setSearchQuery}
-          handleCreateChat={chatState.handleCreateChat}
-          setShowApiDialog={chatState.setShowApiDialog}
-          anchorEl={chatState.anchorEl}
-          setAnchorEl={chatState.setAnchorEl}
-          handleMenuAction={chatState.handleMenuAction}
-        />
+        {isMobile ? (
+          <Drawer
+            anchor="left"
+            open={mobileLeftOpen}
+            onClose={() => setMobileLeftOpen(false)}
+            PaperProps={{ sx: { width: 260 } }}
+          >
+            <Sidebar
+              chats={chatState.chats}
+              activeId={chatState.activeId}
+              setActiveId={(id) => {
+                chatState.setActiveId(id);
+                setMobileLeftOpen(false);
+              }}
+              searchQuery={chatState.searchQuery}
+              setSearchQuery={chatState.setSearchQuery}
+              handleCreateChat={() => {
+                chatState.handleCreateChat();
+                setMobileLeftOpen(false);
+              }}
+              setShowApiDialog={(show) => {
+                chatState.setShowApiDialog(show);
+                setMobileLeftOpen(false);
+              }}
+              anchorEl={chatState.anchorEl}
+              setAnchorEl={chatState.setAnchorEl}
+              handleMenuAction={chatState.handleMenuAction}
+            />
+          </Drawer>
+        ) : (
+          <Sidebar
+            chats={chatState.chats}
+            activeId={chatState.activeId}
+            setActiveId={chatState.setActiveId}
+            searchQuery={chatState.searchQuery}
+            setSearchQuery={chatState.setSearchQuery}
+            handleCreateChat={chatState.handleCreateChat}
+            setShowApiDialog={chatState.setShowApiDialog}
+            anchorEl={chatState.anchorEl}
+            setAnchorEl={chatState.setAnchorEl}
+            handleMenuAction={chatState.handleMenuAction}
+          />
+        )}
 
         {/* Middle Chat Panel */}
         <ChatPanel
@@ -58,18 +95,39 @@ export default function App() {
           handleForkChat={chatState.handleForkChat}
           handleMenuAction={chatState.handleMenuAction}
           handleStop={chatState.handleStop}
+          isMobile={isMobile}
+          onToggleLeftDrawer={() => setMobileLeftOpen(!mobileLeftOpen)}
+          onToggleRightDrawer={() => setMobileRightOpen(!mobileRightOpen)}
         />
 
         {/* Right Sidebar (Settings) */}
         {chatState.activeChat && (
-          <SettingsPanel
-            rightTab={chatState.rightTab}
-            setRightTab={chatState.setRightTab}
-            params={chatState.params}
-            setParams={chatState.setParams}
-            apiLogs={chatState.apiLogs}
-            setApiLogs={chatState.setApiLogs}
-          />
+          isMobile ? (
+            <Drawer
+              anchor="right"
+              open={mobileRightOpen}
+              onClose={() => setMobileRightOpen(false)}
+              PaperProps={{ sx: { width: 340 } }}
+            >
+              <SettingsPanel
+                rightTab={chatState.rightTab}
+                setRightTab={chatState.setRightTab}
+                params={chatState.params}
+                setParams={chatState.setParams}
+                apiLogs={chatState.apiLogs}
+                setApiLogs={chatState.setApiLogs}
+              />
+            </Drawer>
+          ) : (
+            <SettingsPanel
+              rightTab={chatState.rightTab}
+              setRightTab={chatState.setRightTab}
+              params={chatState.params}
+              setParams={chatState.setParams}
+              apiLogs={chatState.apiLogs}
+              setApiLogs={chatState.setApiLogs}
+            />
+          )
         )}
 
         {/* API Settings Dialog */}

@@ -20,7 +20,7 @@ export function SettingsPanel({
   setApiLogs
 }: SettingsPanelProps) {
   return (
-    <Box width={340} borderLeft="1px solid #e5e5e7" bgcolor="#ffffff" display="flex" flexDirection="column">
+    <Box width={340} borderLeft="1px solid #e5e5e7" bgcolor="#ffffff" display="flex" flexDirection="column" data-testid="settings-panel-container">
       <Tabs value={rightTab} onChange={(_, v) => setRightTab(v)} variant="fullWidth" sx={{ borderBottom: '1px solid #e5e5e7' }}>
         <Tab icon={<Tune />} label="Parameters" />
         <Tab icon={<History />} label="Logs" />

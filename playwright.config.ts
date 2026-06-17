@@ -7,6 +7,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: 'list',
+  timeout: 5000,
   use: {
     viewport: { width: 1280, height: 800 },
   },
@@ -14,6 +15,10 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
     },
   ],
 });

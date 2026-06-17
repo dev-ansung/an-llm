@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import * as path from 'path';
+import { ensureRightSidebarOpen, getScreenshotPath, ensureDrawersClosed } from './utils';
 
 test.describe('LLM Chat Attachments Integration Suite', () => {
   const base64Png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -14,7 +15,7 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     await page.reload();
   });
 
-  test('1. should show popover options, stage text and image files, and allow deletion', async ({ page }) => {
+  test('1. should show popover options, stage text and image files, and allow deletion', async ({ page }, testInfo) => {
     // Create new chat to show input box
     await page.locator('button:has-text("New Chat")').click();
 
@@ -52,10 +53,10 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     await expect(page.locator('[data-testid="staged-file"]')).not.toBeVisible();
     await expect(page.locator('[data-testid="staged-image"]')).toBeVisible();
 
-    await page.screenshot({ path: './dist/attachments-1-previews.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'attachments-1-previews'), fullPage: true });
   });
 
-  test('2. should send message with image, format multimodal payload, and render preview thumbnail in bubbles', async ({ page }) => {
+  test('2. should send message with image, format multimodal payload, and render preview thumbnail in bubbles', async ({ page }, testInfo) => {
     let capturedPayload: any = null;
 
     // Set up endpoint mock
@@ -110,10 +111,10 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     expect(userMessage.content[1].type).toBe('image_url');
     expect(userMessage.content[1].image_url.url).toContain('data:image/png;base64,');
 
-    await page.screenshot({ path: './dist/attachments-2-vision.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'attachments-2-vision'), fullPage: true });
   });
 
-  test('3. should send message with text file, append inside code blocks, and render file badge in bubbles', async ({ page }) => {
+  test('3. should send message with text file, append inside code blocks, and render file badge in bubbles', async ({ page }, testInfo) => {
     let capturedPayload: any = null;
 
     // Set up endpoint mock
@@ -168,10 +169,10 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     expect(userMessage.content).toContain('Some special text content.');
     expect(userMessage.content).toContain('Please summarize.');
 
-    await page.screenshot({ path: './dist/attachments-3-files.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'attachments-3-files'), fullPage: true });
   });
 
-  test('4. should support pasting image from clipboard', async ({ page }) => {
+  test('4. should support pasting image from clipboard', async ({ page }, testInfo) => {
     // Create new chat
     await page.locator('button:has-text("New Chat")').click();
 
@@ -209,14 +210,15 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     await expect(page.locator('[data-testid="staged-attachments-preview"]')).toBeVisible();
     await expect(page.locator('[data-testid="staged-image"]')).toBeVisible();
 
-    await page.screenshot({ path: './dist/attachments-4-paste.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'attachments-4-paste'), fullPage: true });
   });
 
-  test('5. should downsize large images if downsizing is enabled and respect max px limit', async ({ page }) => {
+  test('5. should downsize large images if downsizing is enabled and respect max px limit', async ({ page }, testInfo) => {
     // Create new chat to show parameters
     await page.locator('button:has-text("New Chat")').click();
 
     // Verify downsizing setting is visible in the right side panel
+    await ensureRightSidebarOpen(page);
     await expect(page.locator('[data-testid="downsize-enabled-toggle"]')).toBeVisible();
     
     // Fill the max px setting to 1000 px for testing
@@ -224,6 +226,7 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     await maxPxInput.fill('1000');
 
     // Focus on input
+    await ensureDrawersClosed(page);
     const input = page.getByPlaceholder('Send a message to the model...');
     await input.focus();
 
@@ -283,9 +286,11 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     expect(dimensions.height).toBe(500);
 
     // Now disable downsizing
+    await ensureRightSidebarOpen(page);
     await page.locator('[data-testid="downsize-enabled-toggle"]').click();
 
     // Clear staged attachments
+    await ensureDrawersClosed(page);
     await page.locator('[data-testid="remove-attachment"]').click();
     await expect(page.locator('[data-testid="staged-image"]')).not.toBeVisible();
 
@@ -341,6 +346,6 @@ test.describe('LLM Chat Attachments Integration Suite', () => {
     expect(dimensionsOriginal.width).toBe(3000);
     expect(dimensionsOriginal.height).toBe(1500);
 
-    await page.screenshot({ path: './dist/attachments-5-downsizing.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'attachments-5-downsizing'), fullPage: true });
   });
 });

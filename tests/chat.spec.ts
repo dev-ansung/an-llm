@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import * as path from 'path';
+import { ensureLeftSidebarOpen, ensureRightSidebarOpen, getScreenshotPath } from './utils';
 
 test.describe('LLM Chat Application Integration Suite', () => {
   
@@ -13,22 +14,28 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await page.reload();
   });
 
-  test('1. should render welcome screen, sidebar elements, and parameters panel', async ({ page }) => {
+  test('1. should render welcome screen, sidebar elements, and parameters panel', async ({ page }, testInfo) => {
     // Welcome text
     await expect(page.locator('text=Select a chat or create a new one to begin.')).toBeVisible();
     await expect(page.locator('button:has-text("New Chat")')).toBeVisible();
 
     // Sidebar elements
-    await expect(page.locator('text=Chats')).toBeVisible();
+    await ensureLeftSidebarOpen(page);
+    await expect(page.getByRole('heading', { name: 'Chats' })).toBeVisible();
     await expect(page.getByPlaceholder('Search chats...')).toBeVisible();
     await expect(page.locator('button:has-text("API Settings")')).toBeVisible();
 
     // Right panel should not be visible when no chat is active
-    await expect(page.locator('text=Model Parameters')).not.toBeVisible();
-    await page.screenshot({ path: './dist/chat-1-welcome.png', fullPage: true });
+    const isMobile = page.viewportSize() ? page.viewportSize()!.width < 900 : false;
+    if (isMobile) {
+      await expect(page.locator('[data-testid="mobile-settings-button"]')).not.toBeVisible();
+    } else {
+      await expect(page.locator('text=Model Parameters')).not.toBeVisible();
+    }
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-1-welcome'), fullPage: true });
   });
 
-  test('2. should handle chat CRUD operations', async ({ page }) => {
+  test('2. should handle chat CRUD operations', async ({ page }, testInfo) => {
     // Create Chat
     await page.locator('button:has-text("New Chat")').click();
     await expect(page.locator('text=New Chat').first()).toBeVisible();
@@ -52,12 +59,13 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify returning to welcome screen
     await expect(page.locator('text=Select a chat or create a new one to begin.')).toBeVisible();
-    await page.screenshot({ path: './dist/chat-2-crud.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-2-crud'), fullPage: true });
   });
 
-  test('3. should configure and persist API settings in localStorage', async ({ page }) => {
+  test('3. should configure and persist API settings in localStorage', async ({ page }, testInfo) => {
     // Open API Settings
     await page.locator('button:has-text("New Chat")').click(); // activate screen to enable layout
+    await ensureLeftSidebarOpen(page);
     await page.locator('button:has-text("API Settings")').click();
     await expect(page.locator('text=API Configuration')).toBeVisible();
 
@@ -73,13 +81,14 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Reload page to verify persistence
     await page.reload();
+    await ensureLeftSidebarOpen(page);
     await page.locator('button:has-text("API Settings")').click();
     await expect(page.getByLabel('API Base URL')).toHaveValue('https://mockapi.openai.com/v1');
     await expect(page.getByLabel('Model Name')).toHaveValue('gpt-4o-mock');
-    await page.screenshot({ path: './dist/chat-3-api-settings.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-3-api-settings'), fullPage: true });
   });
 
-  test('4. should support mocked streaming completions and render performance metrics', async ({ page }) => {
+  test('4. should support mocked streaming completions and render performance metrics', async ({ page }, testInfo) => {
     // Set up endpoint mock
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
@@ -107,10 +116,10 @@ test.describe('LLM Chat Application Integration Suite', () => {
     // Verify statistics (speed, tokens)
     await expect(page.locator('text=tokens')).toBeVisible();
     await expect(page.locator('text=tok/s')).toBeVisible();
-    await page.screenshot({ path: './dist/chat-4-streaming.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-4-streaming'), fullPage: true });
   });
 
-  test('5. should support inline message editing (Discard vs. Save)', async ({ page }) => {
+  test('5. should support inline message editing (Discard vs. Save)', async ({ page }, testInfo) => {
     // Setup message thread
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
@@ -149,10 +158,10 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(page.locator('text=Confirmed Content')).toBeVisible();
     // Verify editing preserved downstream replies
     await expect(page.locator('text=Reply')).toBeVisible();
-    await page.screenshot({ path: './dist/chat-5-editing.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-5-editing'), fullPage: true });
   });
 
-  test('6. should support forking conversation into new chats', async ({ page }) => {
+  test('6. should support forking conversation into new chats', async ({ page }, testInfo) => {
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
         status: 200,
@@ -173,10 +182,10 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Assert a new active chat exists with title suffix
     await expect(page.locator('text=New Chat (Fork)').first()).toBeVisible();
-    await page.screenshot({ path: './dist/chat-6-forking.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-6-forking'), fullPage: true });
   });
 
-  test('7. should support deleting messages instantly from conversation list', async ({ page }) => {
+  test('7. should support deleting messages instantly from conversation list', async ({ page }, testInfo) => {
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
         status: 200,
@@ -197,13 +206,14 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify deletion in UI
     await expect(page.locator('text=Deletable message')).not.toBeVisible();
-    await page.screenshot({ path: './dist/chat-7-deletion.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-7-deletion'), fullPage: true });
   });
 
-  test('8. should toggle settings tabs and parameters', async ({ page }) => {
+  test('8. should toggle settings tabs and parameters', async ({ page }, testInfo) => {
     await page.locator('button:has-text("New Chat")').click();
 
     // Tabs
+    await ensureRightSidebarOpen(page);
     const logsTab = page.locator('button:has-text("Logs")');
     const paramsTab = page.locator('button:has-text("Parameters")');
 
@@ -227,10 +237,10 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(thinkingSwitch).not.toBeChecked();
     await thinkingSwitch.click();
     await expect(thinkingSwitch).toBeChecked();
-    await page.screenshot({ path: './dist/chat-8-toggles.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-8-toggles'), fullPage: true });
   });
 
-  test('9. should support continuing assistant messages', async ({ page }) => {
+  test('9. should support continuing assistant messages', async ({ page }, testInfo) => {
     let requestCount = 0;
     await page.route('**/v1/chat/completions', async (route) => {
       requestCount++;
@@ -268,26 +278,28 @@ test.describe('LLM Chat Application Integration Suite', () => {
 
     // Verify continuation text is appended to the same assistant message
     await expect(page.locator('text=Once upon a time, there was a model.')).toBeVisible();
-    await page.screenshot({ path: './dist/chat-9-continuation.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-9-continuation'), fullPage: true });
   });
 
-  test('10. should have hover tooltips for all icon buttons', async ({ page }) => {
+  test('10. should have hover tooltips for all icon buttons', async ({ page }, testInfo) => {
     await page.locator('button:has-text("New Chat")').click();
 
     // Verify aria-label tooltip wiring
-    const newChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="AddIcon"]') }).first();
+    await ensureLeftSidebarOpen(page);
+    const newChatBtn = page.locator('[data-testid="sidebar-container"] button').filter({ has: page.locator('svg[data-testid="AddIcon"]') }).first();
     await expect(newChatBtn).toHaveAttribute('aria-label', 'New Chat');
 
     const deleteChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).first();
     await expect(deleteChatBtn).toHaveAttribute('aria-label', 'Delete Chat');
-    await page.screenshot({ path: './dist/chat-10-tooltips.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-10-tooltips'), fullPage: true });
   });
 
-  test('11. should share and persist global parameters across chats and sessions', async ({ page }) => {
+  test('11. should share and persist global parameters across chats and sessions', async ({ page }, testInfo) => {
     // Create Chat A
     await page.locator('button:has-text("New Chat")').click();
     await expect(page.locator('text=New Chat').first()).toBeVisible();
 
+    await ensureRightSidebarOpen(page);
     const paramsTab = page.locator('button:has-text("Parameters")');
     await paramsTab.click();
 
@@ -296,22 +308,25 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await systemPromptInput.fill('You are a coding wizard.');
 
     // Create Chat B (using the sidebar add icon button)
-    const sidebarNewChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="AddIcon"]') }).first();
+    await ensureLeftSidebarOpen(page);
+    const sidebarNewChatBtn = page.locator('[data-testid="sidebar-container"] button').filter({ has: page.locator('svg[data-testid="AddIcon"]') }).first();
     await sidebarNewChatBtn.click();
 
     // Verify Chat B shares the same global parameter
+    await ensureRightSidebarOpen(page);
     await expect(page.getByPlaceholder('Enter system prompt...')).toHaveValue('You are a coding wizard.');
 
     // Reload page (simulating fresh session)
     await page.reload();
+    await ensureRightSidebarOpen(page);
     await paramsTab.click();
 
     // Verify settings persisted
     await expect(page.getByPlaceholder('Enter system prompt...')).toHaveValue('You are a coding wizard.');
-    await page.screenshot({ path: './dist/chat-11-global-parameters.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-11-global-parameters'), fullPage: true });
   });
 
-  test('12. should support regenerating assistant messages', async ({ page }) => {
+  test('12. should support regenerating assistant messages', async ({ page }, testInfo) => {
     let requestCount = 0;
     await page.route('**/v1/chat/completions', async (route) => {
       requestCount++;
@@ -344,10 +359,10 @@ test.describe('LLM Chat Application Integration Suite', () => {
     // Verify it updates to the new response
     await expect(page.locator('text=There was a brave developer')).toBeVisible();
     await expect(page.locator('text=Once upon a time')).not.toBeVisible();
-    await page.screenshot({ path: './dist/chat-12-regeneration.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-12-regeneration'), fullPage: true });
   });
 
-  test('13. should support stopping an ongoing LLM generation call', async ({ page }) => {
+  test('13. should support stopping an ongoing LLM generation call', async ({ page }, testInfo) => {
     // Set up endpoint mock to stall response forever
     await page.route('**/v1/chat/completions', async () => {
       await new Promise(() => {});
@@ -370,13 +385,14 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(page.locator('[data-testid="send-button"]')).toBeVisible();
 
     // Switch to Logs panel and verify log entry is recorded as Aborted
+    await ensureRightSidebarOpen(page);
     await page.locator('button:has-text("Logs")').click();
     await expect(page.locator('text=Aborted').first()).toBeVisible();
 
-    await page.screenshot({ path: './dist/chat-13-stop-generation.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-13-stop-generation'), fullPage: true });
   });
 
-  test('14. should maintain identical text wrapping during message edit', async ({ page }) => {
+  test('14. should maintain identical text wrapping during message edit', async ({ page }, testInfo) => {
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
         status: 200,
@@ -399,7 +415,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(userBubble).toBeVisible();
     const normalBox = await userBubble.boundingBox();
     expect(normalBox).not.toBeNull();
-    await page.screenshot({ path: './dist/chat-14-wrap-normal.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-14-wrap-normal'), fullPage: true });
 
     // Trigger edit mode
     const editBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="EditIcon"]') }).nth(1);
@@ -412,7 +428,7 @@ test.describe('LLM Chat Application Integration Suite', () => {
     expect(editBox).not.toBeNull();
 
     // Take screenshot of edit mode user message bubble
-    await page.screenshot({ path: './dist/chat-14-wrap-editing.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'chat-14-wrap-editing'), fullPage: true });
 
     // Verify dimensions are almost identical (allowing a small padding/border tolerance of 15px)
     console.log('--- BOUNDING BOXES ---', 'normal:', normalBox, 'edit:', editBox);

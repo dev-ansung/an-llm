@@ -29,7 +29,7 @@ export function Sidebar({
   handleMenuAction
 }: SidebarProps) {
   return (
-    <Box width={260} borderRight="1px solid #e5e5e7" bgcolor="#f4f4f7" display="flex" flexDirection="column">
+    <Box width={260} borderRight="1px solid #e5e5e7" bgcolor="#f4f4f7" display="flex" flexDirection="column" data-testid="sidebar-container">
       <Stack direction="row" justifyContent="space-between" alignItems="center" p={2}>
         <Typography variant="h6" fontWeight="bold">Chats</Typography>
         <Tooltip title="New Chat">

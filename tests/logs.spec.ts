@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import * as path from 'path';
+import { ensureRightSidebarOpen, getScreenshotPath, ensureDrawersClosed } from './utils';
 
 test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
   
@@ -10,7 +11,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await page.reload();
   });
 
-  test('should display Parameters by default and log API requests on success', async ({ page }) => {
+  test('should display Parameters by default and log API requests on success', async ({ page }, testInfo) => {
     // Mock the completions endpoint
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
@@ -29,6 +30,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await page.locator('button:has-text("New Chat")').click();
 
     // Verify Parameters is visible by default and Logs can be clicked
+    await ensureRightSidebarOpen(page);
     await expect(page.locator('text=Model Parameters')).toBeVisible();
     
     const logsTab = page.locator('button:has-text("Logs")');
@@ -42,6 +44,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await systemPromptInput.fill('You are a helpful debug helper.');
 
     // Send a message
+    await ensureDrawersClosed(page);
     const input = page.getByPlaceholder('Send a message to the model...');
     await input.fill('Ping log test');
     await input.press('Enter');
@@ -50,6 +53,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await expect(page.locator('text=Hello! How can I assist?')).toBeVisible();
 
     // Go to Logs tab and verify log entry exists
+    await ensureRightSidebarOpen(page);
     await logsTab.click();
     await expect(page.locator('text=POST /chat/completions')).toBeVisible();
     await expect(page.locator('text=google/gemma-4-12b-qat').first()).toBeVisible();
@@ -67,12 +71,12 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await expect(page.locator('text=Hello! How can I assist?').first()).toBeVisible();
 
     // Take screenshot of logs state
-    const screenshotPath = path.resolve(process.cwd(), './dist/logs-1-success.png');
+    const screenshotPath = getScreenshotPath(testInfo, 'logs-1-success');
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`Saved logs screenshot to: ${screenshotPath}`);
   });
 
-  test('should log API errors in detail and allow clearing logs', async ({ page }) => {
+  test('should log API errors in detail and allow clearing logs', async ({ page }, testInfo) => {
     // Mock the completions endpoint with an error status
     await page.route('**/v1/chat/completions', async (route) => {
       await route.fulfill({
@@ -94,6 +98,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
     await expect(page.locator('text=Injected server malfunction test error.').first()).toBeVisible();
 
     // Go to Logs and verify the error log entry
+    await ensureRightSidebarOpen(page);
     const logsTab = page.locator('button:has-text("Logs")');
     await logsTab.click();
     await expect(page.locator('text=POST /chat/completions')).toBeVisible();
@@ -109,7 +114,7 @@ test.describe('LLM Chat Application API Call Logs Feature Suite', () => {
 
     // Verify list is empty
     await expect(page.locator('text=No API calls recorded yet.')).toBeVisible();
-    await page.screenshot({ path: './dist/logs-2-error-clear.png', fullPage: true });
+    await page.screenshot({ path: getScreenshotPath(testInfo, 'logs-2-error-clear'), fullPage: true });
   });
 
 });
