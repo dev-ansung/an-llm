@@ -221,8 +221,58 @@ test.describe('LLM Chat Application Integration Suite', () => {
     await expect(thinkingSwitch).not.toBeChecked();
     await thinkingSwitch.click();
     await expect(thinkingSwitch).toBeChecked();
+  });
 
-    // Save final screenshot of parameters and settings
+  test('9. should support continuing assistant messages', async ({ page }) => {
+    let requestCount = 0;
+    await page.route('**/v1/chat/completions', async (route) => {
+      requestCount++;
+      const requestBody = route.request().postDataJSON();
+      
+      if (requestCount === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: 'data: {"choices":[{"delta":{"content":"Once upon a time"}}]}\n\ndata: [DONE]\n\n'
+        });
+      } else {
+        const lastMsg = requestBody.messages[requestBody.messages.length - 1];
+        expect(lastMsg.role).toBe('assistant');
+        expect(lastMsg.content).toBe('Once upon a time');
+        
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: 'data: {"choices":[{"delta":{"content":", there was a model."}}]}\n\ndata: [DONE]\n\n'
+        });
+      }
+    });
+
+    await page.locator('button:has-text("New Chat")').click();
+    const input = page.getByPlaceholder('Send a message to the model...');
+    await input.fill('Write a story opening');
+    await input.press('Enter');
+
+    await expect(page.locator('text=Once upon a time')).toBeVisible();
+
+    // Click continue button (ArrowForward)
+    const continueBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="ArrowForwardIcon"]') }).first();
+    await continueBtn.click();
+
+    // Verify continuation text is appended to the same assistant message
+    await expect(page.locator('text=Once upon a time, there was a model.')).toBeVisible();
+  });
+
+  test('10. should have hover tooltips for all icon buttons', async ({ page }) => {
+    await page.locator('button:has-text("New Chat")').click();
+
+    // Verify aria-label tooltip wiring
+    const newChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="AddIcon"]') }).first();
+    await expect(newChatBtn).toHaveAttribute('aria-label', 'New Chat');
+
+    const deleteChatBtn = page.locator('button').filter({ has: page.locator('svg[data-testid="DeleteIcon"]') }).first();
+    await expect(deleteChatBtn).toHaveAttribute('aria-label', 'Delete Chat');
+
     const screenshotPath = path.resolve(process.cwd(), './dist/playwright-screenshot.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`Successfully completed all tests. Screenshot saved to: ${screenshotPath}`);

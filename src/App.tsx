@@ -7,7 +7,8 @@ import {
 } from '@mui/material';
 import {
   Search, Folder, Add, MoreVert, Send, Settings, Psychology, Visibility, ContentCopy,
-  Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, FolderOpen, Computer, CloudQueue
+  Delete, Edit, AltRoute, Replay, ExpandMore, Tune, Build, FolderOpen, Computer, CloudQueue,
+  ArrowForward
 } from '@mui/icons-material';
 import OpenAI from 'openai';
 
@@ -71,15 +72,26 @@ export default function App() {
     if (name) setFolders([...folders, { id: Date.now().toString(), name }]);
   };
 
-  const handleSend = async () => {
-    if (!activeChat || !inputValue.trim() || loading) return;
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: inputValue };
-    const updatedMsgs = [...activeChat.messages, userMsg];
-    const assistantMsgId = (Date.now() + 1).toString();
-    const assistantMsg: Message = { id: assistantMsgId, role: 'assistant', content: '', model: api.modelName };
-    
-    setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: [...updatedMsgs, assistantMsg] } : c));
-    setInputValue('');
+  const handleSend = async (continueId?: string) => {
+    if (!activeChat || loading) return;
+    let updatedMsgs: Message[];
+    let assistantMsgId: string;
+    const isCont = !!continueId;
+
+    if (isCont) {
+      const idx = activeChat.messages.findIndex(m => m.id === continueId);
+      if (idx === -1) return;
+      updatedMsgs = activeChat.messages.slice(0, idx + 1);
+      assistantMsgId = continueId;
+    } else {
+      if (!inputValue.trim()) return;
+      const userMsg: Message = { id: Date.now().toString(), role: 'user', content: inputValue };
+      updatedMsgs = [...activeChat.messages, userMsg];
+      assistantMsgId = (Date.now() + 1).toString();
+      const assistantMsg: Message = { id: assistantMsgId, role: 'assistant', content: '', model: api.modelName };
+      setChats(chats.map(c => c.id === activeChat.id ? { ...c, messages: [...updatedMsgs, assistantMsg] } : c));
+      setInputValue('');
+    }
     setLoading(true);
 
     abortControllerRef.current = new AbortController();
@@ -180,7 +192,7 @@ export default function App() {
         <Box width={260} borderRight="1px solid #e5e5e7" bgcolor="#f4f4f7" display="flex" flexDirection="column">
           <Stack direction="row" justifyContent="space-between" alignItems="center" p={2}>
             <Typography variant="h6" fontWeight="bold">Chats</Typography>
-            <IconButton onClick={() => handleCreateChat()} size="small"><Add /></IconButton>
+            <Tooltip title="New Chat"><IconButton onClick={() => handleCreateChat()} size="small"><Add /></IconButton></Tooltip>
           </Stack>
           <Box px={2} pb={1}>
             <TextField fullWidth size="small" placeholder="Search chats..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -198,12 +210,12 @@ export default function App() {
                     <Folder fontSize="small" sx={{ color: '#007aff' }} />
                     <Typography fontSize={13} fontWeight="bold">{f.name}</Typography>
                   </Stack>
-                  <IconButton size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: f.id, isFolder: true })}><MoreVert fontSize="small" /></IconButton>
+                  <Tooltip title="Folder Options"><IconButton size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: f.id, isFolder: true })}><MoreVert fontSize="small" /></IconButton></Tooltip>
                 </Stack>
                 <List dense sx={{ pl: 2, py: 0 }}>
                   {chats.filter(c => c.folderId === f.id && c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
                     <ListItem key={c.id} disablePadding secondaryAction={
-                      <IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id, isFolder: false })}><MoreVert fontSize="small" /></IconButton>
+                      <Tooltip title="Chat Options"><IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id, isFolder: false })}><MoreVert fontSize="small" /></IconButton></Tooltip>
                     }>
                       <ListItemButton selected={activeId === c.id} onClick={() => setActiveId(c.id)} sx={{ borderRadius: 1 }}>
                         <ListItemText primary={c.title} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
@@ -216,7 +228,7 @@ export default function App() {
             <List dense>
               {chats.filter(c => !c.folderId && c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
                 <ListItem key={c.id} disablePadding secondaryAction={
-                  <IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id, isFolder: false })}><MoreVert fontSize="small" /></IconButton>
+                  <Tooltip title="Chat Options"><IconButton edge="end" size="small" onClick={e => setAnchorEl({ el: e.currentTarget, id: c.id, isFolder: false })}><MoreVert fontSize="small" /></IconButton></Tooltip>
                 }>
                   <ListItemButton selected={activeId === c.id} onClick={() => setActiveId(c.id)} sx={{ borderRadius: 1 }}>
                     <ListItemText primary={c.title} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
@@ -237,8 +249,8 @@ export default function App() {
               <Stack direction="row" justifyContent="space-between" alignItems="center" px={3} py={1.5} borderBottom="1px solid #e5e5e7">
                 <Typography variant="subtitle1" fontWeight="bold">{activeChat.title}</Typography>
                 <Stack direction="row" spacing={1}>
-                  <IconButton size="small" onClick={() => handleMenuAction('rename', activeChat.id)}><Edit fontSize="small" /></IconButton>
-                  <IconButton size="small" onClick={() => handleMenuAction('delete', activeChat.id)}><Delete fontSize="small" /></IconButton>
+                  <Tooltip title="Rename Chat"><IconButton size="small" onClick={() => handleMenuAction('rename', activeChat.id)}><Edit fontSize="small" /></IconButton></Tooltip>
+                  <Tooltip title="Delete Chat"><IconButton size="small" onClick={() => handleMenuAction('delete', activeChat.id)}><Delete fontSize="small" /></IconButton></Tooltip>
                 </Stack>
               </Stack>
               
@@ -287,10 +299,10 @@ export default function App() {
                           <Stack spacing={0.5} alignItems="flex-end">
                             <Box bgcolor="#e3e3e7" px={2} py={1} borderRadius={4}><Typography fontSize={14}>{m.content}</Typography></Box>
                             <Stack direction="row" spacing={0.5}>
-                              <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => handleDeleteMessage(m.id)}><Delete fontSize="inherit" /></IconButton>
+                              <Tooltip title="Fork conversation"><IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Copy message"><IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Edit message"><IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Delete message"><IconButton size="small" onClick={() => handleDeleteMessage(m.id)}><Delete fontSize="inherit" /></IconButton></Tooltip>
                             </Stack>
                           </Stack>
                         )
@@ -344,11 +356,12 @@ export default function App() {
                               </Stack>
                             )}
                             <Stack direction="row" spacing={0.5}>
-                              <IconButton size="small" onClick={handleSend}><Replay fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton>
-                              <IconButton size="small" onClick={() => handleDeleteMessage(m.id)}><Delete fontSize="inherit" /></IconButton>
+                              <Tooltip title="Regenerate message"><IconButton size="small" onClick={() => handleSend()}><Replay fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Continue assistant message"><IconButton size="small" onClick={() => handleSend(m.id)}><ArrowForward fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Fork conversation"><IconButton size="small" onClick={() => handleForkChat(m.id)}><AltRoute fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Copy message"><IconButton size="small" onClick={() => navigator.clipboard.writeText(m.content)}><ContentCopy fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Edit message"><IconButton size="small" onClick={() => { setEditId(m.id); setEditText(m.content); }}><Edit fontSize="inherit" /></IconButton></Tooltip>
+                              <Tooltip title="Delete message"><IconButton size="small" onClick={() => handleDeleteMessage(m.id)}><Delete fontSize="inherit" /></IconButton></Tooltip>
                             </Stack>
                           </Stack>
                         )
@@ -366,12 +379,12 @@ export default function App() {
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} variant="standard" InputProps={{ disableUnderline: true }} />
                   <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
                     <Stack direction="row" spacing={1}>
-                      <IconButton size="small" color="primary"><Add /></IconButton>
-                      <IconButton size="small"><Build fontSize="small" /></IconButton>
+                      <Tooltip title="Attach"><IconButton size="small" color="primary"><Add /></IconButton></Tooltip>
+                      <Tooltip title="Tools"><IconButton size="small"><Build fontSize="small" /></IconButton></Tooltip>
                       <Button size="small" startIcon={<Psychology />} variant={activeChat.enableThinking ? 'contained' : 'outlined'} onClick={() => updateChatProp(activeChat.id, 'enableThinking', !activeChat.enableThinking)} sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Think</Button>
                       {api.vision && <Button size="small" startIcon={<Visibility />} variant="outlined" sx={{ borderRadius: 3, textTransform: 'none', px: 1.5 }}>Vision</Button>}
                     </Stack>
-                    <IconButton onClick={handleSend} disabled={!inputValue.trim() || loading} color="primary" sx={{ bgcolor: inputValue.trim() ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }}><Send fontSize="small" /></IconButton>
+                    <Tooltip title="Send message"><IconButton onClick={() => handleSend()} disabled={!inputValue.trim() || loading} color="primary" sx={{ bgcolor: inputValue.trim() ? '#007aff' : '#f4f4f7', color: '#fff', '&:hover': { bgcolor: '#0062cc' } }}><Send fontSize="small" /></IconButton></Tooltip>
                   </Stack>
                 </Box>
               </Box>
